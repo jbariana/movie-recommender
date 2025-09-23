@@ -1,0 +1,22 @@
+-- Dataset Info --
+Content: Ratings (5-star scale) and tags for movies from MovieLens
+Size: 100,836 ratings, 3,683 tags, 9,742 movies, 610 users
+(This is using the small version of the dataset, could be expanded to work with bigger one later)
+
+Files:
+
+--|ratings.csv: userId, movieId, rating, timestamp (sorted by userId then movieId).
+
+--|tags.csv: userId, movieId, tag, timestamp (sorted by userId then movieId).
+
+--|movies.csv: movieId, title, genres (genres pipe-separated).
+
+--|links.csv: movieId, imdbId, tmdbId (external identifiers).
+
+Data Notes:
+_ CSV files, UTF-8 encoded.
+_ User and movie IDs are consistent across files.
+_ Ratings include half-star increments (0.5–5.0).
+_ Timestamps are in seconds since Jan 1, 1970 (UTC)
+
+LINK: https://grouplens.org/datasets/movielens/
