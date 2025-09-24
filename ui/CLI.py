@@ -36,7 +36,14 @@ User:
         
         elif command == "user":
             print("User test functions: \n\nuser reset - Resets user \nuser get - Get user details \nuser update - Update username")
+            continue
         elif command == "user reset":
             user.reset()   
-            print("User reset.")
+            print("To be Implemented:")
+            continue
+        elif command == "user get":
+            print("To be Implemented:")
+            continue
+        elif command == "user update": 
+            print("To be Implemented:")
             continue
