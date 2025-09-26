@@ -3,7 +3,7 @@
 ## Overview
 Uses python for AI based recommendations on movies based on publicly available databases of movies and user ratings. 
 
-## Proj Structure
+## Project Structure
 movie_recommender/
 ├── .venv/                          # (local) virtual environment — user-specific
 ├── .vscode/
