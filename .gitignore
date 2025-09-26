@@ -1,0 +1,14 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+
+# Local DB artifact
+database/movies.db
+
+# OS/editor cruft
+.DS_Store
+.ipynb_checkpoints/
+.pytest_cache/
