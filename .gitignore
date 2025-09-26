@@ -12,3 +12,25 @@ database/movies.db
 .DS_Store
 .ipynb_checkpoints/
 .pytest_cache/
+
+# macOS Finder
+.DS_Store
+
+# VS Code workspace settings (if you customize locally)
+.vscode/
+
+# Python packaging & build caches (future-proof)
+build/
+dist/
+*.egg-info/
+
+# Logs & coverage (if you add tests later)
+*.log
+.coverage
+htmlcov/
+
+# Jupyter checkpoints (if you ever use notebooks)
+.ipynb_checkpoints/
+
+# Data archives (keep CSVs, ignore zips)
+data/*.zip
