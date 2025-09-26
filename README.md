@@ -1,12 +1,6 @@
 # Movie Recommender
 
 ## Overview
-Uses python for AI based recommendations on movies based on publicly available databases of movies and user ratings. 
-
-## Project Structure
-# Movie Recommender
-
-## Overview
 Uses Python to generate AI-based movie recommendations from public datasets (MovieLens) and user ratings. This repo includes a SQLite database loader, a baseline recommender, and a simple CLI to print Top-K picks.
 
 ## Project Structure
