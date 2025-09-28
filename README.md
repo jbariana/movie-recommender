@@ -8,7 +8,6 @@ Uses Python to generate AI-based movie recommendations from public datasets (Mov
 
 ```plaintext
 movie_recommender/
-├── .venv/                          # (local) virtual environment — user-specific
 ├── .vscode/
 │   └── settings.json               # VS Code Python settings / interpreter path
 │
@@ -50,10 +49,15 @@ movie_recommender/
 └── requirements.txt                # project dependencies
 
 ## TL;DR Flow (what happens when you “use it”)
-- Data arrives → We have CSV files (movies.csv, ratings.csv, etc.) in data/.
-- We build a database → database/init_db.py reads those CSVs and fills movies.db (a SQLite file).
-- We ask for recommendations → The CLI app (ui/CLI_recommend.py) asks the recommender code to pick movies.
-- Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
-- You see results → The CLI prints the list.
+- Run Main
+- Main calls load db function -> database.load_movielens.main
+    - Data arrives → We have CSV files in data/.
+    - We build a database → two scripts are involved:
+        - `database/init_db.py` creates the DB schema (tables + indexes).
+        - `database/load_movielens.py` reads the CSV files and inserts rows into `database/movies.db` (this is what `main.py` calls to populate the DB).
+- Main calls UI (CLI currently)
+- CLI accesses recommend and profile to execute commands
+    - Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
+    - You see results → The CLI prints the list.
 
 ```

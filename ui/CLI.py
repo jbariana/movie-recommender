@@ -58,14 +58,14 @@ def cli():
                 print("Invalid input. Movie ID and rating must be integers.")
             continue
 
-        # RECOMMEND: allow `rec` or `rec <k>` (keep prompts same)
+        # RECOMMEND: allow rec or rec <k>
         elif command.startswith("rec"):
             parts = command.split()
-            # use numeric second token as k when provided
             k = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
 
             user_id = input("Enter user ID: ").strip()
 
+            # account for 'REC'
             if k is None:
                 k_input = input("Enter number of recommendations (default 10): ").strip()
                 k = int(k_input) if k_input.isdigit() else 10
@@ -101,7 +101,8 @@ User:
     user get       Get user details
     user update    Update username
     add rating     Add a movie rating to local user profile
-RECOMMEND:
+                  
+Recommend:
     rec <k>        reccommends k movies for a given user ID
                   """)
             continue

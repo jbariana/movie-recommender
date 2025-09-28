@@ -1,4 +1,4 @@
-from ui.CLI import cli
+from ui.cli import cli
 from database.load_movielens import main as load_db
 
 
