@@ -47,10 +47,12 @@ movie_recommender/
 ├── README.md
 ├── requirements.lock.txt
 └── requirements.txt                # project dependencies
+```
 
 ## TL;DR Flow (what happens when you “use it”)
+```plaintext
 - Run Main
-- Main calls
+- Main makes a call to initialize the database
 - Main calls load db function -> database.load_movielens.main
     - Data arrives → We have CSV files in data/.
     - We build a database → two scripts are involved:
@@ -60,5 +62,16 @@ movie_recommender/
 - CLI accesses recommend and profile to execute commands
     - Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
     - You see results → The CLI prints the list.
-
+```
+## INSTALL INFO
+```plaintext
+1. clone repository
+    git clone <url>
+2. create and activate a virtual environment
+    python -m venv venv
+3. Install dependencies from the log file
+    pip install --upgrade pip setuptools wheel
+    pip install -r requirements.lock.txt
+4. Run the project
+    python -m main
 ```
