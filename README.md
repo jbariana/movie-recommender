@@ -44,9 +44,8 @@ movie_recommender/
 │
 ├── .gitignore
 ├── main.py                         # entry point
-├── README.md
-├── requirements.lock.txt
-└── requirements.txt                # project dependencies
+├── README.md                      
+└── requirements.lock.txt          # project dependencies
 ```
 
 ## TL;DR Flow (what happens when you “use it”)
