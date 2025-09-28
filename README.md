@@ -38,7 +38,7 @@ movie_recommender/
 │   ├── baseline.py                 # very first pass recommender (e.g., popular/top-N)
 │   └── data_loader.py              # helper functions to load CSV/DB data
 │
-├── ui/                             # Lightweight user interface(s)
+├── ui/                             # user interface(s)
 │   ├── __init__.py
 │   └── CLI.py                      # main ui
 │
