@@ -33,6 +33,7 @@ def cli():
             # user alone -> print user help
             if len(parts) == 1:
                 print("""\
+
 user                User Help   
 user reset          Resets user
 user get            Get user details
@@ -48,6 +49,7 @@ add rating          Add a single movie rating to local user profile""")
                 continue
 
             if sub == "get":
+                print()
                 print(f"Username: {user.getUsername()}\nRatings: {user.ratings}")
                 continue
 
@@ -68,7 +70,7 @@ add rating          Add a single movie rating to local user profile""")
                 print(f"User profile randomized with {n} random ratings.")
                 continue
             #ADD SINGLE RATING TO USER
-            if command == "add rating":
+            if sub == "add":
                 try:
                     movie_id = int(input("Enter movie ID: ").strip())
                     rating = int(input("Enter rating (1-5): ").strip())
@@ -102,11 +104,10 @@ add rating          Add a single movie rating to local user profile""")
             k = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
 
             user_id = input("Enter user ID: ").strip()
-
+            print()
             # account for 'REC'
             if k is None:
-                k_input = input("Enter number of recommendations (default 10): ").strip()
-                k = int(k_input) if k_input.isdigit() else 10
+                k = 10
 
             try:
                 user_id = int(user_id)
@@ -126,6 +127,7 @@ add rating          Add a single movie rating to local user profile""")
         #HELP
         if command == "help":
             print("""\
+
 Available commands:
 
 General:
@@ -139,7 +141,7 @@ User:
     user get            Get user details
     user update         Update username
     user randomize <n>  Randomly rate n movies for testing purposes
-    add rating          Add a single movie rating to local user profile
+    user add rating     Add a single movie rating to local user profile
                   
 Recommend:
     rec                 recommends 10 movies for a given user ID

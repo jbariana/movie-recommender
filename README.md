@@ -67,11 +67,9 @@ movie_recommender/
 ```plaintext
 1. clone repository
     git clone <url>
-2. create and activate a virtual environment
-    python -m venv venv
-3. Install dependencies from the log file
-    pip install --upgrade pip setuptools wheel
-    pip install -r requirements.lock.txt
-4. Run the project
+
+2. Install dependencies shown in 'requirements.lock.txt'
+
+3. Run the project
     python -m main
 ```
