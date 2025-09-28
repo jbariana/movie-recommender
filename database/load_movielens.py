@@ -53,12 +53,8 @@ def load_links(path: Path, conn) -> None:
     df.rename(columns={"movieId": "movie_id", "imdbId": "imdb_id", "tmdbId": "tmdb_id"}, inplace=True)
     df.to_sql("links", conn, if_exists="append", index=False)
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, required=True, help="Path to MovieLens folder, e.g., data/ml-latest-small")
-    args = parser.parse_args()
-
-    src = Path(args.data_path)
+def main(data_path) -> None:
+    src = Path(data_path)
     if not (src / "movies.csv").exists():
         raise FileNotFoundError(f"Could not find movies.csv under {src}. Did you unzip the dataset?")
 

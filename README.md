@@ -1,9 +1,11 @@
 # Movie Recommender
 
 ## Overview
+
 Uses Python to generate AI-based movie recommendations from public datasets (MovieLens) and user ratings. This repo includes a SQLite database loader, a baseline recommender, and a simple CLI to print Top-K picks.
 
 ## Project Structure
+
 ```plaintext
 movie_recommender/
 ├── .venv/                          # (local) virtual environment — user-specific
@@ -39,10 +41,10 @@ movie_recommender/
 │
 ├── ui/                             # Lightweight user interface(s)
 │   ├── __init__.py
-│   └── CLI_recommend.py            # CLI to print Top-K recs for a user
+│   └── CLI.py                      # main ui
 │
 ├── .gitignore
-├── main.py                         # optional entry point (can delegate to CLI)
+├── main.py                         # entry point
 ├── README.md
 ├── requirements.lock.txt
 └── requirements.txt                # project dependencies
@@ -54,3 +56,4 @@ movie_recommender/
 - Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
 - You see results → The CLI prints the list.
 
+```
