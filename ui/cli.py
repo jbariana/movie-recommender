@@ -37,7 +37,7 @@ def cli():
 user                User Help   
 user reset          Resets user
 user get            Get user details
-user update         Update username
+user update         Update user ID
 user randomize <n>  Randomly rate n movies for testing purposes
 add rating          Add a single movie rating to local user profile""")
                 continue
@@ -50,12 +50,12 @@ add rating          Add a single movie rating to local user profile""")
 
             if sub == "get":
                 print()
-                print(f"Username: {user.getUsername()}\nRatings: {user.ratings}")
+                print(f"User ID: {user.getUserID()}\nRatings: {user.ratings}")
                 continue
 
             if sub == "update":
-                user.setUsername(input("Enter new username: ").strip())
-                print("Username updated.")
+                user.setUserID(input("Enter new user ID: ").strip())
+                print("User ID updated.")
                 continue
 
             if sub == "randomize":
@@ -139,7 +139,7 @@ User:
     user                User Help   
     user reset          Resets user
     user get            Get user details
-    user update         Update username
+    user update         Update user ID
     user randomize <n>  Randomly rate n movies for testing purposes
     user add rating     Add a single movie rating to local user profile
                   

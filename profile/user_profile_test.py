@@ -1,8 +1,8 @@
 import json
 
 class UserProfile:
-    def __init__(self, username):
-        self.username = username
+    def __init__(self, user_id):
+        self.user_id = user_id
         self.ratings = []  # list of (movie_id, rating) tuples
 
     @classmethod
@@ -10,7 +10,7 @@ class UserProfile:
         try:
             with open(filename, "r") as f:
                 data = json.load(f)
-            user = cls(data["username"])
+            user = cls(data["user_id"])
             user.ratings = data.get("ratings", [])
             return user
         except FileNotFoundError:
@@ -19,7 +19,7 @@ class UserProfile:
 
     def to_file(self):
         data = {
-            "username": self.username,
+            "user_id": self.user_id,
             "ratings": self.ratings
         }
         with open("profile/user_profile.json", "w") as f:
@@ -35,15 +35,15 @@ class UserProfile:
                 return r
 
     def reset(self):
-        self.username = "user_test"
+        self.user_id = "99"
         self.ratings = []
         self.to_file()
         
-    def getUsername(self):
-        return self.username
+    def getUserID(self):
+        return self.user_id
     
-    def setUsername(self, new_username):
-        self.username = new_username
+    def setUserID(self, new_user_id):
+        self.user_id = new_user_id
         self.to_file()
         
     def randomize(self, num_ratings):
