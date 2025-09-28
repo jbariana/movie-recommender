@@ -23,46 +23,67 @@ def cli():
             break
         
         #CLEAR
-        elif command == "clear":
+        if command == "clear":
             clear()
             continue
         
-        #USER HELP
-        elif command == "user":
-            print("""\
+        # USER: handle all user/* subcommands via startswith
+        if command.startswith("user"):
+            parts = command.split()
+            # user alone -> print user help
+            if len(parts) == 1:
+                print("""\
 user                User Help   
 user reset          Resets user
 user get            Get user details
 user update         Update username
 user randomize <n>  Randomly rate n movies for testing purposes
 add rating          Add a single movie rating to local user profile""")
-            continue
-        #USER RESET, GET, UPDATE, RANDOMIZE
-        elif command == "user reset":
-            user.reset()   
-            print("User reset to default values.")
-            continue
-        elif command == "user get":
-            print(f"Username: {user.getUsername()}\nRatings: {user.ratings}")
-            continue
-        elif command == "user update": 
-            user.setUsername(input("Enter new username: ").strip())
-            print("Username updated.")     
-            continue
-        elif command.startswith("user randomize"):
-            parts = command.split()
-            if len(parts) != 3 or not parts[2].isdigit():
-                print("Usage: user randomize <n>  (where n is a positive integer)")
                 continue
-            n = int(parts[2])
-            if n <= 0:
-                print("Please enter a positive integer for n.")
+
+            sub = parts[1]
+            if sub == "reset":
+                user.reset()
+                print("User reset to default values.")
                 continue
-            user.randomize(n)
-            print(f"User profile randomized with {n} random ratings.")
+
+            if sub == "get":
+                print(f"Username: {user.getUsername()}\nRatings: {user.ratings}")
+                continue
+
+            if sub == "update":
+                user.setUsername(input("Enter new username: ").strip())
+                print("Username updated.")
+                continue
+
+            if sub == "randomize":
+                if len(parts) != 3 or not parts[2].isdigit():
+                    print("Usage: user randomize <n>  (where n is a positive integer)")
+                    continue
+                n = int(parts[2])
+                if n <= 0:
+                    print("Please enter a positive integer for n.")
+                    continue
+                user.randomize(n)
+                print(f"User profile randomized with {n} random ratings.")
+                continue
+            #ADD SINGLE RATING TO USER
+            if command == "add rating":
+                try:
+                    movie_id = int(input("Enter movie ID: ").strip())
+                    rating = int(input("Enter rating (1-5): ").strip())
+                    if rating < 1 or rating > 5:
+                        print("Rating must be between 1 and 5.")
+                        continue
+                    user.add_rating(movie_id, rating)
+                    print(f"Added rating {rating} for movie ID {movie_id}.")
+                except ValueError:
+                    print("Invalid input. Movie ID and rating must be integers.")
+                continue
+                
+            else:
+                print("Unknown user subcommand. Type 'user' for help.")
             continue
-        #ADD SINGLE RATING TO USER
-        elif command == "add rating":
             try:
                 movie_id = int(input("Enter movie ID: ").strip())
                 rating = int(input("Enter rating (1-5): ").strip())
@@ -76,7 +97,7 @@ add rating          Add a single movie rating to local user profile""")
             continue
 
         # RECOMMEND: allow rec or rec <k>
-        elif command.startswith("rec"):
+        if command.startswith("rec"):
             parts = command.split()
             k = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
 
@@ -103,26 +124,26 @@ add rating          Add a single movie rating to local user profile""")
             continue
 
         #HELP
-        elif command == "help":
+        if command == "help":
             print("""\
 Available commands:
 
 General:
-    help           Show this help message 
-    clear          Clears CLI
-    quit           Exit the CLI
+    help                Show this help message 
+    clear               Clears CLI
+    quit                Exit the CLI
 
 User:
-    user           User Help   
-    user reset     Resets user
-    user get       Get user details
-    user update    Update username
+    user                User Help   
+    user reset          Resets user
+    user get            Get user details
+    user update         Update username
     user randomize <n>  Randomly rate n movies for testing purposes
-    add rating     Add a single movie rating to local user profile
+    add rating          Add a single movie rating to local user profile
                   
 Recommend:
-    rec            recommends 10 movies for a given user ID
-    rec <k>        recommends k movies for a given user ID                  """)
+    rec                 recommends 10 movies for a given user ID
+    rec <k>             recommends k movies for a given user ID""")
             continue
         else:
             print("Unknown command. Type 'help' for a list of commands.")
