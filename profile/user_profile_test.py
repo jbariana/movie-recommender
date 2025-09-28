@@ -45,5 +45,15 @@ class UserProfile:
     def setUsername(self, new_username):
         self.username = new_username
         self.to_file()
+        
+    def randomize(self, num_ratings):
+        import random
+        movie_ids = list(range(1, 9743)) #9743 movies in dataset currently(test program so just gonna hardcode and change later) 
+        self.ratings = []
+        for _ in range(num_ratings):
+            movie_id = random.choice(movie_ids)
+            rating = random.randint(1, 5)
+            self.ratings.append((movie_id, rating))
+        self.to_file()
 
     

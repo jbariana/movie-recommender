@@ -29,9 +29,15 @@ def cli():
         
         #USER HELP
         elif command == "user":
-            print("User test functions: \n\nuser reset - Resets user \nuser get - Get user details \nuser update - Update username")
+            print("""\
+user                User Help   
+user reset          Resets user
+user get            Get user details
+user update         Update username
+user randomize <n>  Randomly rate n movies for testing purposes
+add rating          Add a single movie rating to local user profile""")
             continue
-        #USER RESET, GET, UPDATE
+        #USER RESET, GET, UPDATE, RANDOMIZE
         elif command == "user reset":
             user.reset()   
             print("User reset to default values.")
@@ -43,7 +49,18 @@ def cli():
             user.setUsername(input("Enter new username: ").strip())
             print("Username updated.")     
             continue
-
+        elif command.startswith("user randomize"):
+            parts = command.split()
+            if len(parts) != 3 or not parts[2].isdigit():
+                print("Usage: user randomize <n>  (where n is a positive integer)")
+                continue
+            n = int(parts[2])
+            if n <= 0:
+                print("Please enter a positive integer for n.")
+                continue
+            user.randomize(n)
+            print(f"User profile randomized with {n} random ratings.")
+            continue
         #ADD SINGLE RATING TO USER
         elif command == "add rating":
             try:
@@ -100,11 +117,12 @@ User:
     user reset     Resets user
     user get       Get user details
     user update    Update username
-    add rating     Add a movie rating to local user profile
+    user randomize <n>  Randomly rate n movies for testing purposes
+    add rating     Add a single movie rating to local user profile
                   
 Recommend:
-    rec <k>        reccommends k movies for a given user ID
-                  """)
+    rec            recommends 10 movies for a given user ID
+    rec <k>        recommends k movies for a given user ID                  """)
             continue
         else:
             print("Unknown command. Type 'help' for a list of commands.")
