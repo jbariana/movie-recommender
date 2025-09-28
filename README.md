@@ -50,6 +50,7 @@ movie_recommender/
 
 ## TL;DR Flow (what happens when you “use it”)
 - Run Main
+- Main calls
 - Main calls load db function -> database.load_movielens.main
     - Data arrives → We have CSV files in data/.
     - We build a database → two scripts are involved:
