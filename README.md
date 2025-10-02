@@ -25,6 +25,8 @@ movie_recommender/
 │   ├── .gitkeep
 │   ├── connection.py               # get_db() / connection helpers
 │   ├── init_db.py                  # build schema + load CSVs into movies.db
+│   ├── id_to_title.py              # for getting a title given an ID
+│   ├── load_movielens.py           # loads db into created schema
 │   └── movies.db                   # generated after running init_db.py
 │
 ├── profile/                        # Local user profile (optional)
@@ -44,23 +46,26 @@ movie_recommender/
 │
 ├── .gitignore
 ├── main.py                         # entry point
-├── README.md                      
+├── README.md
 └── requirements.lock.txt          # project dependencies
 ```
 
 ## TL;DR Flow (what happens when you “use it”)
+
 ```plaintext
 - Run Main
 - Main makes call to initialize the database
     - databse.init_db.main creates SQLite schema for data
 - Main calls load db function
-    - database.load_movielens.main loads data from csvs into schema 
+    - database.load_movielens.main loads data from csvs into schema
 - Main calls UI (CLI currently)
 - CLI accesses recommend and profile to execute commands
     - Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
     - You see results → The CLI prints the list.
 ```
+
 ## INSTALL INFO
+
 ```plaintext
 1. clone repository
     git clone <url>
@@ -70,7 +75,9 @@ movie_recommender/
 3. Run the project
     python -m main
 ```
+
 ## Current CLI Commands
+
 ```plaintext
 General functions
     help                Show a help message w/ these commands
@@ -78,13 +85,12 @@ General functions
     quit                Exit the CLI
 
 User functions
-    user                User Help   
+    user                User Help
     user reset          Resets user
     user get            Get user details
-    user update         Update username
     user randomize <n>  Randomly rate n movies for testing purposes
     user add rating     Add a single movie rating to local user profile
-                  
+
 Recommend functions
     rec                 recommends 10 movies for a given user ID
     rec <k>             recommends k movies for a given user ID
