@@ -1,81 +1,45 @@
-"""
-data_loader.py
-Convenience functions to read from SQLite for training/evaluation.
-
-Examples:
-    from recommender.data_loader import load_ratings_df, iter_user_ratings
-
-    df = load_ratings_df()
-    for user_id, movie_id, rating in iter_user_ratings(user_ids=[1,2,3]):
-        ...
-"""
-
+# recommender/data_loader.py
 from __future__ import annotations
-import sqlite3
-from typing import Generator, Iterable, Tuple
 import pandas as pd
 from pathlib import Path
 
-# Reuse the same DB helper
-from database.connection import get_db
+DATA_DIR = Path("data/ml-latest-small")
+PROFILE_JSON = Path("profile/user_profile.json")
 
-def load_movies_df(columns: list[str] | None = None) -> pd.DataFrame:
-    cols = columns or ["movie_id", "title", "year", "genres"]
-    q = f"SELECT {', '.join(cols)} FROM movies"
-    with get_db(readonly=True) as conn:
-        return pd.read_sql_query(q, conn)
+def _load_core_ratings() -> pd.DataFrame:
+    """MovieLens ratings.csv -> DataFrame[userId,movieId,rating]"""
+    return pd.read_csv(DATA_DIR / "ratings.csv", usecols=["userId", "movieId", "rating"])
 
-def load_ratings_df(min_ratings_per_user: int | None = None) -> pd.DataFrame:
-    """
-    Returns a DataFrame with columns: user_id, movie_id, rating, timestamp.
-    Optionally filters to users with at least `min_ratings_per_user` ratings.
-    """
-    with get_db(readonly=True) as conn:
-        if min_ratings_per_user is None:
-            return pd.read_sql_query("SELECT * FROM ratings", conn)
-        q = """
-            WITH cnt AS (
-              SELECT user_id, COUNT(*) AS n FROM ratings GROUP BY user_id
-            )
-            SELECT r.*
-            FROM ratings r
-            JOIN cnt ON cnt.user_id = r.user_id
-            WHERE cnt.n >= ?
-        """
-        return pd.read_sql_query(q, conn, params=(min_ratings_per_user,))
+def _load_extra_ratings() -> pd.DataFrame:
+    """Ratings saved by /sync-profile -> same columns (may be empty)."""
+    if not PROFILE_JSON.exists():
+        return pd.DataFrame(columns=["userId", "movieId", "rating"])
+    data = pd.read_json(PROFILE_JSON)
+    rows = data.get("ratings", [])
+    if isinstance(rows, list):
+        return pd.DataFrame(rows, columns=["userId", "movieId", "rating"])
+    return pd.DataFrame(columns=["userId", "movieId", "rating"])
+
+def load_ratings_df() -> pd.DataFrame:
+    """Core MovieLens + any user-synced ratings."""
+    base = _load_core_ratings()
+    extra = _load_extra_ratings()
+    if not extra.empty:
+        base = pd.concat([base, extra], ignore_index=True)
+    return base
 
 def load_user_item_matrix() -> pd.DataFrame:
     """
-    Returns a pivoted user-item matrix (users as rows, movies as columns).
-    Useful for baseline/item-item recommenders.
+    Pivot to users x movies float matrix with NaN for unrated.
+    This is what your baseline() expects.
     """
     df = load_ratings_df()
-    return df.pivot_table(index="user_id", columns="movie_id", values="rating")
+    ui = df.pivot_table(index="userId", columns="movieId", values="rating", aggfunc="mean")
+    return ui.sort_index(axis=0).sort_index(axis=1)
 
-def iter_user_ratings(user_ids: Iterable[int] | None = None) -> Generator[Tuple[int,int,float,int], None, None]:
-    """
-    Yields (user_id, movie_id, rating, timestamp) one row at a time.
-    Use for streaming/online algorithms without loading everything into memory.
-    """
-    with get_db(readonly=True) as conn:
-        cur = conn.cursor()
-        if user_ids:
-            q = f"SELECT user_id, movie_id, rating, timestamp FROM ratings WHERE user_id IN ({','.join('?'*len(list(user_ids)))}) ORDER BY user_id"
-            cur.execute(q, list(user_ids))
-        else:
-            cur.execute("SELECT user_id, movie_id, rating, timestamp FROM ratings ORDER BY user_id")
-        for row in cur:
-            yield int(row[0]), int(row[1]), float(row[2]), int(row[3])
-
-def get_movie_titles(movie_ids: Iterable[int]) -> dict[int, str]:
-    """
-    Returns {movie_id: title} for a list of IDs — handy for pretty outputs.
-    """
-    ids = list(movie_ids)
-    if not ids:
-        return {}
-    placeholders = ",".join("?" * len(ids))
-    q = f"SELECT movie_id, title FROM movies WHERE movie_id IN ({placeholders})"
-    with get_db(readonly=True) as conn:
-        rows = conn.execute(q, ids).fetchall()
-    return {int(mid): title for (mid, title) in rows}
+def get_movie_titles(movie_ids: list[int]) -> dict[int, str]:
+    """Return {movieId: title} for the ids requested."""
+    m = pd.read_csv(DATA_DIR / "movies.csv", usecols=["movieId", "title"])
+    m["movieId"] = m["movieId"].astype(int)
+    subset = m[m["movieId"].isin(movie_ids)]
+    return dict(zip(subset["movieId"], subset["title"]))

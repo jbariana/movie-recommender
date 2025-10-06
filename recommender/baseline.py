@@ -1,60 +1,64 @@
-"""
-baseline.py
-Very small item–item cosine similarity recommender using the SQLite-loaded data.
-This is just to prove the DB + loader works for modeling.
-"""
-
 from __future__ import annotations
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
-from .data_loader import load_user_item_matrix, get_movie_titles
+from typing import List, Dict
 
-def _cosine_sim(A: np.ndarray) -> np.ndarray:
-    # A: users x items (NaNs -> 0)
-    A = np.nan_to_num(A, copy=False)
-    norms = np.linalg.norm(A, axis=0, keepdims=True) + 1e-9
-    A_norm = A / norms
-    return A_norm.T @ A_norm   # items x items
+class BaselineRecommender:
+    def __init__(self, min_ratings_per_item: int = 5):
+        self.min_ratings_per_item = min_ratings_per_item
+        self.item_popularity_: pd.Series | None = None
+        self.item_index_: Dict[int, int] = {}
+        self.index_item_: List[int] = []
+        self.item_item_sim_: np.ndarray | None = None
 
-def fit_item_item():
-    ui = load_user_item_matrix()             # users x movies
-    sim = _cosine_sim(ui.values)             # movies x movies
-    movie_ids = ui.columns.to_numpy()
-    return sim, movie_ids
+    def fit(self, ratings: pd.DataFrame) -> "BaselineRecommender":
+        counts = ratings.groupby("movieId")["rating"].count()
+        self.item_popularity_ = counts[counts >= self.min_ratings_per_item].sort_values(ascending=False)
 
-def recommend_for_user(user_id: int, k: int = 10) -> List[Tuple[int, float]]:
-    """
-    Returns a list of (movie_id, score) for the given user.
-    Simple score = sum(similarity to items the user rated) * rating.
-    """
-    ui = load_user_item_matrix()
-    if user_id not in ui.index:
-        return []
-    sim, movie_ids = fit_item_item()
+        self.index_item_ = list(self.item_popularity_.index)
+        self.item_index_ = {mid: i for i, mid in enumerate(self.index_item_)}
+        users = ratings["userId"].unique()
+        user_index = {u: i for i, u in enumerate(users)}
 
-    user_ratings = ui.loc[user_id]           # Series of ratings indexed by movie_id
-    rated = user_ratings.dropna()
-    if rated.empty:
-        return []
+        M = np.zeros((len(users), len(self.index_item_)), dtype=np.float32)
+        for row in ratings.itertuples(index=False):
+            if row.movieId in self.item_index_:
+                M[user_index[row.userId], self.item_index_[row.movieId]] = row.rating
 
-    # map rated movie ids to indices in sim matrix
-    id_to_idx = {mid: i for i, mid in enumerate(movie_ids)}
-    rated_idx = np.array([id_to_idx[m] for m in rated.index], dtype=int)
+        col_norms = np.linalg.norm(M, axis=0) + 1e-8
+        M_norm = M / col_norms
+        self.item_item_sim_ = M_norm.T @ M_norm
+        np.fill_diagonal(self.item_item_sim_, 0.0)
+        return self
 
-    # score all movies by similarity to rated ones, weighted by rating
-    weights = rated.values
-    scores = (sim[:, rated_idx] @ weights)   # shape: (num_movies,)
-    # do not recommend already-rated
-    scores[rated_idx] = -np.inf
+    def recommend_for_user(self, ratings: pd.DataFrame, user_id: int, k_sim: int = 30, top_n: int = 10) -> List[int]:
+        assert self.item_item_sim_ is not None and self.item_popularity_ is not None, "Call fit() first."
+        user_hist = ratings[ratings["userId"] == user_id]
+        seen = set(user_hist["movieId"].tolist())
+        scores = np.zeros(len(self.index_item_), dtype=np.float32)
 
-    # top-k
-    top_idx = np.argpartition(scores, -k)[-k:]
-    top_idx = top_idx[np.argsort(scores[top_idx])[::-1]]
-    recs = [(int(movie_ids[i]), float(scores[i])) for i in top_idx if np.isfinite(scores[i])]
-    return recs[:k]
+        for row in user_hist.itertuples(index=False):
+            if row.movieId in self.item_index_:
+                j = self.item_index_[row.movieId]
+                sims = self.item_item_sim_[j]
+                if k_sim and k_sim < len(sims):
+                    top_idx = np.argpartition(-sims, k_sim)[:k_sim]
+                    scores[top_idx] += sims[top_idx] * row.rating
+                else:
+                    scores += sims * row.rating
 
-def recommend_titles_for_user(user_id: int, k: int = 10):
-    recs = recommend_for_user(user_id, k)
-    titles = get_movie_titles([mid for mid, _ in recs])
-    return [(titles[mid], score) for mid, score in recs]
+        candidates = []
+        for idx in np.argsort(-scores):
+            mid = self.index_item_[idx]
+            if mid not in seen and scores[idx] > 0:
+                candidates.append(mid)
+            if len(candidates) >= top_n:
+                break
+
+        if len(candidates) < top_n:
+            for mid in self.item_popularity_.index:
+                if mid not in seen and mid not in candidates:
+                    candidates.append(mid)
+                if len(candidates) >= top_n:
+                    break
+        return candidates[:top_n]

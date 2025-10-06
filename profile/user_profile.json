@@ -1,4 +1,19 @@
 {
-    "user_id": "99",
-    "ratings": []
+  "ratings": [
+    {
+      "userId": 999,
+      "movieId": 1,
+      "rating": 4.0
+    },
+    {
+      "userId": 999,
+      "movieId": 296,
+      "rating": 4.5
+    },
+    {
+      "userId": 999,
+      "movieId": 318,
+      "rating": 5.0
+    }
+  ]
 }
