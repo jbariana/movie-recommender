@@ -1,15 +1,18 @@
-from ui.cli import cli
-from database.load_movielens import main as load_db
-from database.init_db import main as init_db
-from database.sync_json import sync_user_ratings
 from pathlib import Path
 
+def init_database_and_sync(data_path: str = "data/ml-latest-small", profile_path: Path | str | None = None):
+    """
+    Initialize DB, load MovieLens data, and sync local profile.
+    Safe to call from the web server (does not import the CLI).
+    """
+    from database.init_db import main as init_db
+    from database.load_movielens import main as load_db
+    from database.sync_json import sync_user_ratings
+
+    init_db()
+    load_db(data_path)
+    path_to_local = Path(profile_path) if profile_path else Path(__file__).parent / "profile" / "user_profile.json"
+    sync_user_ratings(path_to_local)
 
 if __name__ == "__main__":
-    init_db()                                                                   # Initialize database
-    load_db("data/ml-latest-small")                                             # Load the database
-
-    path_to_local = Path(__file__).parent / "profile" / "user_profile.json"
-    sync_user_ratings(path_to_local)                                            # Sync user ratings to db
-
-    cli()                                                                       # Start UI (CLI in this case)
+    init_database_and_sync()

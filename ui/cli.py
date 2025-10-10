@@ -1,7 +1,7 @@
 import os
 from typing import Any, List, Tuple
 
-from profile.user_profile_test import UserProfile
+from user_profile.user_profile_test import UserProfile
 from recommender.baseline import recommend_titles_for_user
 from database.id_to_title import id_to_title
 
