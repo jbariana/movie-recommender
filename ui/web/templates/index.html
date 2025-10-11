@@ -5,15 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Movie Recommender (Web Test 1)</title>
     <link
-      href="{{url_for('static', filename='styles/style.css')}}"
+      href="{{ url_for('static', filename='style.css') }}"
       rel="stylesheet"
     />
   </head>
   <body>
-    <h1>Movie Recommender</h1>
-    <form action="/weather">
-      <input type="text" name="city" placeholder="movie time" />
-      <button type="submit">Submit</button>
-    </form>
+    <div class="header">
+      <h1>Welcome to Movie Recommender v.0.2</h1>
+    </div>
+
+    <div class="container">
+      <div class="user section">
+        <h2>Current User</h2>
+        <button>View Ratings</button>
+        <button>View Statistics</button>
+      </div>
+
+      <div class="action section">
+        <h2>Actions</h2>
+        <button>Get Recommendations</button>
+        <button>Add Rating</button>
+        <button>Remove Rating</button>
+      </div>
+    </div>
   </body>
 </html>
