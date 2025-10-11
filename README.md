@@ -53,7 +53,7 @@ movie_recommender/
 ├── main.py                         # script to initialize and sync database
 ├── app.py                          # entry point to flask application
 ├── README.md
-└── requirements.lock.txt          # project dependencies
+└── requirements.txt          # project dependencies
 ```
 
 ## TL;DR Flow (what happens when you “use it”)
