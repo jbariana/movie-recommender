@@ -21,7 +21,7 @@ def init_database():
         return
 
     try:
-        from main import init_database_and_sync
+        from api.init_and_sync import init_database_and_sync
         profile_path = Path(__file__).parent / "user_profile" / "user_profile.json"
         init_database_and_sync(
             data_path="data/ml-latest-small",
