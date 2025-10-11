@@ -10,6 +10,8 @@ Uses Python to generate AI-based movie recommendations from public datasets (Mov
 movie_recommender/
 ├── .vscode/
 │   └── settings.json               # VS Code Python settings / interpreter path
+├── api/                            # API's that will be exposed to frontend
+│   └── init_and_sync.py            # initializes and syncs database with csv data/json local user profile data
 │
 ├── data/                           # Raw dataset + notes
 │   ├── ml-latest-small/            # MovieLens small dataset (CSV files)

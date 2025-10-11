@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import time
-from database.sync_json import sync_user_ratings
+from api.sync_user_json import sync_user_ratings
 
 PROFILE_PATH = Path(__file__).parent / "user_profile.json"
 

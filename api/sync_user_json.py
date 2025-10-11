@@ -1,17 +1,15 @@
 import json
 from pathlib import Path
-import sqlite3
 import time
+from database.connection import get_db
 
-DB_PATH = Path(__file__).parent / "movies.db"
-
-def _parse_rating_entry(r):
-    """
+"""
     Accepts either:
       - dict: {"movie_id": .., "rating": .., "timestamp": ..}
       - list/tuple: [movie_id, rating] or [movie_id, rating, timestamp]
     Returns (movie_id:int, rating:float, timestamp:int) or None on parse error.
-    """
+"""
+def _parse_rating_entry(r):
     if isinstance(r, dict):
         movie_id = r.get("movie_id") or r.get("movieId")
         rating = r.get("rating")
@@ -42,6 +40,9 @@ def _parse_rating_entry(r):
     return movie_id, rating, ts
 
 def sync_user_ratings(json_path: Path):
+    if not Path(json_path).exists():
+        print(f"(Sync) JSON file not found: {json_path}")
+        return
 
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -49,16 +50,20 @@ def sync_user_ratings(json_path: Path):
     user_id = data.get("user_id")
     ratings = data.get("ratings", [])
 
-    
-    uid = int(user_id)
+    try:
+        uid = int(user_id)
+    except Exception:
+        print(f"(Sync) Invalid user_id in JSON: {user_id}")
+        return
 
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    # Actual sync logic
+    conn = get_db(readonly=False)
     try:
         cursor = conn.cursor()
         if not ratings:
             cursor.execute("DELETE FROM ratings WHERE user_id = ?", (uid,))
             conn.commit()
-            print(f"(Sync)Removed all ratings for user {user_id}.")
+            print(f"(Sync) Removed all ratings for user {user_id}.")
             return
 
         synced = 0
@@ -75,6 +80,6 @@ def sync_user_ratings(json_path: Path):
             )
             synced += 1
         conn.commit()
-        print(f"(Sync)Synced {synced} ratings for user {user_id}.")
+        print(f"(Sync) Synced {synced} ratings for user {user_id}.")
     finally:
         conn.close()
