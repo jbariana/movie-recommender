@@ -1,4 +1,4 @@
-# Movie Recommender
+# Movie Recommender v0.2
 
 ## Overview
 
@@ -29,7 +29,7 @@ movie_recommender/
 │   ├── load_movielens.py           # loads db into created schema
 │   └── movies.db                   # generated after running init_db.py
 │
-├── profile/                        # Local user profile (optional)
+├── user_profile/                     # Local user profile (optional)
 │   ├── __init__.py
 │   ├── user_profile.json           # local prefs; read by CLI/recommender if needed
 │   └── user_profile_test.py        # sample structure / quick tests for profiles
@@ -42,10 +42,16 @@ movie_recommender/
 │
 ├── ui/                             # user interface(s)
 │   ├── __init__.py
-│   └── CLI.py                      # main ui
+│   ├── CLI.py                      # cli test ui
+│   ├── web/                        # all web functions
+│       ├── static/                      # css/js
+│       │   └── style.css                   # stylesheet for web
+│       └── templates/                  # html
+│           └── index.html                  # html for test web page
 │
 ├── .gitignore
-├── main.py                         # entry point
+├── main.py                         # script to initialize and sync database
+├── app.py                          # entry point to flask application
 ├── README.md
 └── requirements.lock.txt          # project dependencies
 ```
@@ -53,15 +59,18 @@ movie_recommender/
 ## TL;DR Flow (what happens when you “use it”)
 
 ```plaintext
-- Run Main
-- Main makes call to initialize the database
-    - databse.init_db.main creates SQLite schema for data
-- Main calls load db function
-    - database.load_movielens.main loads data from csvs into schema
-- Main calls UI (CLI currently)
-- CLI accesses recommend and profile to execute commands
-    - Recommender answers → recommender/baseline.py + recommender/data_loader.py read from the DB and return Top-K movies.
-    - You see results → The CLI prints the list.
+- Run app.py
+- app.py checks if the database exists at DB_PATH
+  - If not, it calls main.init_database_and_sync() to:
+      - initialize the database schema (database.init_db.main)
+      - load MovieLens data from CSVs (database.load_movielens.main)
+      - sync user ratings from JSON profile (database.sync_json.sync_user_ratings)
+- Flask app starts and serves endpoints:
+  - "/" or "/index" renders index.html from ui/web/templates
+- Frontend requests (via browser) access routes:
+  - Recommender reads data from the database (recommender/baseline.py + recommender/data_loader.py)
+  - Top-K movie recommendations are returned
+  - Results are rendered in HTML
 ```
 
 ## INSTALL INFO
@@ -70,13 +79,13 @@ movie_recommender/
 1. clone repository
     git clone <url>
 
-2. Install dependencies shown in 'requirements.lock.txt'
+2. Install dependencies shown in 'requirements.txt'
+    pip install -r requirements.txt
 
-3. Run the project
-    python -m main
+3. Run app.py
 ```
 
-## Current CLI Commands
+## Old CLI Commands
 
 ```plaintext
 General functions
