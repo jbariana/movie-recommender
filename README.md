@@ -83,6 +83,8 @@ movie_recommender/
     pip install -r requirements.txt
 
 3. Run app.py
+
+4. Go to localhost:8000 to see web frontend(before we set up hosting lol)
 ```
 
 ## Old CLI Commands
