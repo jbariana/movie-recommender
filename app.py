@@ -1,5 +1,6 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, jsonify
 from pathlib import Path
+from api.routes import api_bp
 import logging
 import traceback
 
@@ -8,14 +9,16 @@ app = Flask(
     template_folder="ui/web/templates",
     static_folder="ui/web/static",
 )
+app.register_blueprint(api_bp)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 DB_PATH = Path("data/ml-latest-small/movies.db")
 
-#helper function to init db only when it doesn't exist already
-def init_database():
+#helper function to init what needs to be init'd (currently just db only when it doesn't exist already)
+def init():
     if DB_PATH.exists():
         logger.info("Database already exists, skipping initialization.")
         return
@@ -32,11 +35,13 @@ def init_database():
         logger.error("Database initialization failed:")
         traceback.print_exc()
 
+
+
 @app.route("/")
 @app.route("/index")
 def index():
     return render_template("index.html")
 
 if __name__ == "__main__":
-    init_database()
+    init()
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
