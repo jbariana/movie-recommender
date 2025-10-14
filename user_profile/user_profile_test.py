@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import time
-from database.sync_json import sync_user_ratings
+from api.sync_user_json import sync_user_ratings
 
 PROFILE_PATH = Path(__file__).parent / "user_profile.json"
 
@@ -21,6 +21,9 @@ class UserProfile:
             return user
         except FileNotFoundError:
             return cls("xxxxxx")
+
+    def get_ratings_from_json():
+        return json.load(open(PROFILE_PATH, "r", encoding="utf-8")).get("ratings", [])
 
     def to_file(self):
         data = {
