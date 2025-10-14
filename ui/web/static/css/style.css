@@ -129,7 +129,33 @@ body {
     color: #ffffff; /* optional: orange/yellow for rating */
 }
 
+.add-rating-box {
+    display: none;
+    gap: 8px;
+    align-items: center;
+}
 
+.add-rating-box.visible {
+    display: flex;
+}
+
+.add-rating-box input[type="text"] {
+    padding: 6px 8px;
+    border: 1px solid #444;
+    background: #121212;
+    color: #fff;
+    border-radius: 4px;
+    width: 120px;
+}
+
+.add-rating-box button {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+}
 
 @media (max-width: 640px) {
     .search-form input[type="text"] { width: 100%; }

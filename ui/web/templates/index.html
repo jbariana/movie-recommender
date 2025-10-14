@@ -26,12 +26,25 @@
         <div class="action section">
           <h2>Actions</h2>
           <button id="get_rec_button">Get Recommendations</button>
-          <button id="add_rating_button">Add Rating</button>
+
+          <div
+            class="add-rating-container"
+            style="display: flex; align-items: center; gap: 8px"
+          >
+            <button id="add_rating_button">Add Rating</button>
+
+            <!-- hidden inline box that appears when Add Rating is clicked -->
+            <div id="add-rating-box" class="add-rating-box" aria-hidden="true">
+              <input id="add_rating_input" type="text" placeholder="Movie ID" />
+              <button id="add_rating_submit">Submit</button>
+              <button id="add_rating_cancel">Cancel</button>
+            </div>
+          </div>
+
           <button id="remove_rating_button">Remove Rating</button>
         </div>
       </div>
 
-      <!-- output now below the top row -->
       <div id="output"></div>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
