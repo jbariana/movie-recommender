@@ -24,6 +24,14 @@ body {
     margin: 32px auto;
     padding: 0 16px;
     display: flex;
+    flex-direction: column; /* stack top-row then output */
+    gap: 24px;
+    align-items: stretch;
+}
+
+/* new top-row holds the two side-by-side columns */
+.top-row {
+    display: flex;
     gap: 24px;
     align-items: flex-start;
 }
@@ -66,7 +74,7 @@ body {
 .action.section button,
 .user.section button {
     background: transparent;
-    color: #111111;
+    color: #ffffff;
     border: none;
     border-radius: 2px;
     cursor: pointer;
@@ -83,18 +91,58 @@ body {
     outline-offset: 2px;
 }
 
-/* small responsive tweaks */
+#output {
+    margin-top: 8px;
+    padding: 16px;
+    background-color: #1e1e1e;
+    border-radius: 2px;
+    color: #ffffff;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    width: 100%;
+}
+
+/* movie item */
+#output .movie {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #333;
+    transition: background 150ms ease;
+}
+
+#output .movie:last-child {
+    border-bottom: none;
+}
+
+#output .movie:hover {
+    background-color: #2c2c2c;
+}
+
+/* movie title */
+#output .movie-title {
+    font-weight: 600;
+}
+
+/* movie rating */
+#output .movie-rating {
+    font-weight: 400;
+    color: #ffffff; /* optional: orange/yellow for rating */
+}
+
+
+
 @media (max-width: 640px) {
     .search-form input[type="text"] { width: 100%; }
     .search-form { flex-direction: column; gap: 10px; align-items: stretch; }
 }
-
-/* keep responsive stacking behavior */
 @media (max-width: 800px) {
     .container {
         flex-direction: column;
     }
     .user.section, .action.section {
         width: 100%;
+    }
+    .top-row {
+        flex-direction: column;
     }
 }

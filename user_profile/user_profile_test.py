@@ -22,6 +22,9 @@ class UserProfile:
         except FileNotFoundError:
             return cls("xxxxxx")
 
+    def get_ratings_from_json():
+        return json.load(open(PROFILE_PATH, "r", encoding="utf-8")).get("ratings", [])
+
     def to_file(self):
         data = {
             "user_id": self.user_id,

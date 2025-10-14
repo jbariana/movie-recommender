@@ -15,18 +15,24 @@
     </div>
 
     <div class="container">
-      <div class="user section">
-        <h2>Current User</h2>
-        <button id="view_ratings_button">View Ratings</button>
-        <button id="view_statistics_button">View Statistics</button>
+      <!-- top row: user + actions side-by-side -->
+      <div class="top-row">
+        <div class="user section">
+          <h2>Current User</h2>
+          <button id="view_ratings_button">View Ratings</button>
+          <button id="view_statistics_button">View Statistics</button>
+        </div>
+
+        <div class="action section">
+          <h2>Actions</h2>
+          <button id="get_rec_button">Get Recommendations</button>
+          <button id="add_rating_button">Add Rating</button>
+          <button id="remove_rating_button">Remove Rating</button>
+        </div>
       </div>
 
-      <div class="action section">
-        <h2>Actions</h2>
-        <button id="get_rec_button">Get Recommendations</button>
-        <button id="add_rating_button">Add Rating</button>
-        <button id="remove_rating_button">Remove Rating</button>
-      </div>
+      <!-- output now below the top row -->
+      <div id="output"></div>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   </body>
