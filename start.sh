@@ -1,6 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 export FLASK_APP=app.py
 export FLASK_ENV=production
-
-# Run Gunicorn in production using the $PORT Render provides
-exec gunicorn app:app --bind 0.0.0.0:$PORT
+flask run --host=0.0.0.0 --port=$PORT
