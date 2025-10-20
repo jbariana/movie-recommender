@@ -1,23 +1,33 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 from pathlib import Path
 from api.routes import api_bp
 import logging
 import traceback
+from datetime import timedelta
 
 app = Flask(
     __name__,
     template_folder="ui/web/templates",
     static_folder="ui/web/static",
 )
+
+# Enable Flask sessions 
+app.secret_key = "supersecretkey"  # replace later with env var
+app.permanent_session_lifetime = timedelta(hours=2)
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+
+
 app.register_blueprint(api_bp)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 DB_PATH = Path("data/ml-latest-small/movies.db")
 
-#helper function to init what needs to be init'd (currently just db only when it doesn't exist already)
+#  Initialize database if needed 
 def init():
     if DB_PATH.exists():
         logger.info("Database already exists, skipping initialization.")
@@ -34,8 +44,6 @@ def init():
     except Exception:
         logger.error("Database initialization failed:")
         traceback.print_exc()
-
-
 
 @app.route("/")
 @app.route("/index")
