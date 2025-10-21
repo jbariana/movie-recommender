@@ -2,121 +2,106 @@ from flask import Blueprint, request, jsonify, session
 from pathlib import Path
 import json
 import logging
-from database.connection import get_db
-from api import api
 
-# Create a Flask Blueprint instance
-api_bp = Blueprint("api_bp", __name__, url_prefix="/api")
+api_bp = Blueprint("api_bp", __name__)
 logger = logging.getLogger(__name__)
 
-# ------------------- User session routes -------------------
+PROFILE_PATH = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
+PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+
 @api_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json() or {}
-    username = data.get("username")
+    payload = request.get_json() or {}
+    username = payload.get("username")
     if not username:
-        return jsonify({"error": "Username is required"}), 400
+        return jsonify({"error": "username required"}), 400
 
+    # persist username in session
     session["username"] = username
-    profile_path = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Ensure user exists in DB and obtain numeric user_id when possible
     uid = None
     try:
+        from database.connection import get_db
         conn = get_db(readonly=False)
         cur = conn.cursor()
         cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
         row = cur.fetchone()
         if row:
-            uid = int(row[0])
+            # sqlite3.Row supports dict-style access
+            try:
+                uid = int(row["user_id"])
+            except Exception:
+                uid = int(row[0])
         else:
             cur.execute("INSERT INTO users (username) VALUES (?)", (username,))
             conn.commit()
             uid = int(cur.lastrowid)
         conn.close()
     except Exception as ex:
-        logger.warning(f"User lookup/creation in DB failed: {ex}")
+        logger.warning(f"User lookup/creation failed: {ex}")
+        # fallback: if username is numeric, use it; otherwise leave uid None
         try:
             uid = int(username)
         except Exception:
             uid = None
 
+    # Load ratings from DB for this user (if we have numeric uid)
     ratings = []
     if isinstance(uid, int):
         try:
             from database.db_query import get_ratings_for_user
             db_rows = get_ratings_for_user(uid)
-            for r in db_rows:
-                ratings.append({
-                    "movie_id": r.get("movie_id"),
-                    "rating": r.get("rating"),
-                    "timestamp": r.get("timestamp"),
-                })
+            # get_ratings_for_user already returns normalized dicts
+            ratings = db_rows
         except Exception as ex:
             logger.info(f"No DB ratings loaded for user {uid}: {ex}")
 
+    # Persist profile JSON with both username and numeric user_id (when available)
     profile_json = {"username": username, "user_id": uid if uid is not None else username, "ratings": ratings}
-    profile_path.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
-
     try:
-        from api.sync_user_json import sync_user_ratings
-        sync_user_ratings(profile_path)
-    except Exception as ex_sync:
-        logger.warning(f"Profile sync after login failed: {ex_sync}")
+        PROFILE_PATH.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
+    except Exception:
+        logger.exception("Failed to write profile JSON on login")
 
-    return jsonify({"message": f"Logged in as {username}", "loaded_ratings": len(ratings), "user_id": uid}), 200
+    return jsonify({"message": "logged in", "username": username, "user_id": uid}), 200
+
+
+@api_bp.route("/session", methods=["GET"])
+def session_info():
+    return jsonify({"username": session.get("username")}), 200
+
 
 @api_bp.route("/logout", methods=["POST"])
 def logout():
+    # On logout, attempt to sync current profile JSON to DB (best-effort)
+    try:
+        from api.sync_user_json import sync_user_ratings
+        if PROFILE_PATH.exists():
+            ok = sync_user_ratings(PROFILE_PATH)
+            if not ok:
+                logger.warning("sync_user_ratings returned False on logout")
+    except Exception:
+        logger.exception("sync_user_ratings failed on logout")
+
+    # clear session
     session.pop("username", None)
-    return jsonify({"message": "Logged out"}), 200
+    return jsonify({"message": "logged out"}), 200
 
-@api_bp.route("/session", methods=["GET"])
-def get_session():
-    username = session.get("username")
-    return jsonify({"username": username}), 200
 
-@api_bp.route("/button-click", methods=["POST"])
+@api_bp.route("/api/button-click", methods=["POST"])
 def button_click():
     payload = request.get_json() or {}
     button_id = payload.get("button")
-    print(f"Button clicked: {button_id}")
-
-    username = session.get("username")
-    if not username:
-        return jsonify({"error": "not_logged_in", "message": "Please log in to use this action."}), 401
-
-    payload["username"] = username  
+    logger.info("Button clicked: %s payload: %s", button_id, payload)
     try:
-        result = api.handle_button_click(button_id, payload)
+        # import the api module robustly (avoid import-from-package edge cases)
+        import importlib
+        api_module = importlib.import_module("api.api")
+        result = api_module.handle_button_click(button_id, payload)
+        logger.info("button_click result: %s", {"button": button_id, "result_keys": list(result.keys()) if isinstance(result, dict) else type(result)})
         return jsonify(result)
     except Exception as ex:
         logger.exception("Error in handle_button_click")
-        return jsonify({"error": "server_error", "message": str(ex)}), 500
-
-# ------------------- Movie search route -------------------
-@api_bp.route("/search", methods=["GET"])
-def search_movies():
-    keyword = request.args.get("q", "").strip().lower()
-    if not keyword:
-        return jsonify({"error": "Missing search keyword"}), 400
-
-    db = get_db()
-    cursor = db.cursor()
-
-    query = """
-        SELECT title, year, rating
-        FROM movies
-        WHERE LOWER(title) LIKE ?
-        ORDER BY rating DESC
-        LIMIT 10;
-    """
-    cursor.execute(query, (f"%{keyword}%",))
-    results = cursor.fetchall()
-
-    movies = [
-        {"title": row[0], "year": row[1], "rating": row[2]}
-        for row in results
-    ]
-
-    return jsonify(movies)
+        return jsonify({"error": str(ex)}), 500

@@ -113,6 +113,19 @@ document.addEventListener("click", (ev) => {
   ];
   if (delegatedIgnore.includes(id)) return;
 
+  // handle search button
+  if (id === "search_button") {
+    ev.preventDefault();
+    const qEl = document.getElementById("search_input");
+    const query = qEl ? qEl.value.trim() : "";
+    if (!query) {
+      outputDiv.textContent = "Enter a search term.";
+      return;
+    }
+    handleActionButton("search", { query });
+    return;
+  }
+
   // map nav/profile/browse buttons to actions
   if (id === "view_ratings_button" || id === "nav_home") {
     ev.preventDefault();
@@ -132,12 +145,27 @@ document.addEventListener("click", (ev) => {
 
   // fallback: if button id begins with a known action, forward it
   if (
-    (id && id.startsWith("view_")) ||
-    id.startsWith("get_") ||
-    id.startsWith("remove_")
+    id &&
+    (id.startsWith("view_") ||
+      id.startsWith("get_") ||
+      id.startsWith("remove_"))
   ) {
     ev.preventDefault();
     handleActionButton(id);
     return;
+  }
+});
+
+// support Enter key in the search input to trigger search
+document.addEventListener("keydown", (ev) => {
+  const active = document.activeElement;
+  if (ev.key === "Enter" && active && active.id === "search_input") {
+    ev.preventDefault();
+    const query = active.value.trim();
+    if (!query) {
+      outputDiv.textContent = "Enter a search term.";
+      return;
+    }
+    handleActionButton("search", { query });
   }
 });

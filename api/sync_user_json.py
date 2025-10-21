@@ -1,85 +1,165 @@
-import json
 from pathlib import Path
+import json
 import time
+import logging
+from typing import Optional
+
 from database.connection import get_db
 
-"""
-    Accepts either:
-      - dict: {"movie_id": .., "rating": .., "timestamp": ..}
-      - list/tuple: [movie_id, rating] or [movie_id, rating, timestamp]
-    Returns (movie_id:int, rating:float, timestamp:int) or None on parse error.
-"""
-def _parse_rating_entry(r):
-    if isinstance(r, dict):
-        movie_id = r.get("movie_id") or r.get("movieId")
-        rating = r.get("rating")
-        ts = r.get("timestamp")
-    elif isinstance(r, (list, tuple)):
-        if len(r) < 2:
-            return None
-        movie_id = r[0]
-        rating = r[1]
-        ts = r[2] if len(r) > 2 else None
-    else:
-        return None
+logger = logging.getLogger(__name__)
 
-    try:
-        movie_id = int(movie_id)
-        rating = float(rating)
-    except Exception:
-        return None
 
-    if ts is None:
-        ts = int(time.time())
-    else:
+def _ensure_user(conn, username: str, prefer_id: Optional[int] = None) -> Optional[int]:
+    cur = conn.cursor()
+    if prefer_id is not None:
         try:
-            ts = int(ts)
+            cur.execute("SELECT user_id FROM users WHERE user_id = ?", (prefer_id,))
+            row = cur.fetchone()
+            if row:
+                try:
+                    return int(row["user_id"])
+                except Exception:
+                    return int(row[0])
         except Exception:
-            ts = int(time.time())
+            pass
 
-    return movie_id, rating, ts
+    cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    if row:
+        try:
+            return int(row["user_id"])
+        except Exception:
+            return int(row[0])
 
-def sync_user_ratings(json_path: Path):
-    if not Path(json_path).exists():
-        print(f"(Sync) JSON file not found: {json_path}")
-        return
+    cur.execute("INSERT INTO users (username) VALUES (?)", (username,))
+    conn.commit()
+    return int(cur.lastrowid)
 
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
 
-    user_id = data.get("user_id")
-    ratings = data.get("ratings", [])
-
+def _find_movie_id_by_title(conn, title: str) -> Optional[int]:
+    if not title:
+        return None
+    cur = conn.cursor()
+    # try exact match first (case-insensitive)
     try:
-        uid = int(user_id)
+        cur.execute("SELECT movie_id FROM movies WHERE LOWER(title) = LOWER(?) LIMIT 1", (title,))
+        row = cur.fetchone()
+        if row:
+            try:
+                return int(row["movie_id"])
+            except Exception:
+                return int(row[0])
     except Exception:
-        print(f"(Sync) Invalid user_id in JSON: {user_id}")
-        return
-
-    # Actual sync logic
-    conn = get_db(readonly=False)
+        pass
+    # fallback: try LIKE search
     try:
-        cursor = conn.cursor()
-        if not ratings:
-            cursor.execute("DELETE FROM ratings WHERE user_id = ?", (uid,))
-            conn.commit()
-            print(f"(Sync) Removed all ratings for user {user_id}.")
-            return
+        cur.execute("SELECT movie_id FROM movies WHERE title LIKE ? LIMIT 1", (f"%{title}%",))
+        row = cur.fetchone()
+        if row:
+            try:
+                return int(row["movie_id"])
+            except Exception:
+                return int(row[0])
+    except Exception:
+        pass
+    return None
 
-        synced = 0
-        for r in ratings:
-            parsed = _parse_rating_entry(r)
-            if not parsed:
+
+def sync_user_ratings(profile_path: Path) -> bool:
+    """
+    Sync the given profile JSON to the DB.
+    - Coerce/resolve numeric user_id where possible
+    - Ensure the user exists and update profile JSON with numeric user_id
+    - Replace that user's ratings in DB with entries from JSON
+    """
+    try:
+        profile_path = Path(profile_path)
+        data = json.loads(profile_path.read_text(encoding="utf-8"))
+    except Exception as ex:
+        logger.exception("Failed to read profile JSON")
+        return False
+
+    username = data.get("username") or str(data.get("user_id") or "")
+    prefer_id_raw = data.get("user_id")
+
+    # coerce prefer_id to int if possible
+    prefer_id = None
+    try:
+        if isinstance(prefer_id_raw, int):
+            prefer_id = prefer_id_raw
+        elif isinstance(prefer_id_raw, str) and prefer_id_raw.isdigit():
+            prefer_id = int(prefer_id_raw)
+    except Exception:
+        prefer_id = None
+
+    try:
+        conn = get_db(readonly=False)
+        cur = conn.cursor()
+
+        uid = _ensure_user(conn, username, prefer_id)
+
+        if uid is None:
+            logger.error("Could not determine or create user id for sync")
+            conn.close()
+            return False
+
+        # update profile JSON to ensure it stores numeric user_id going forward
+        try:
+            if data.get("user_id") != uid:
+                data["user_id"] = uid
+                profile_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            logger.exception("Failed to update profile JSON user_id")
+
+        # delete existing ratings for user
+        cur.execute("DELETE FROM ratings WHERE user_id = ?", (uid,))
+
+        inserted = 0
+        for entry in data.get("ratings", []):
+            # accept movie_id, movie, or title
+            movie_id_raw = entry.get("movie_id") if entry.get("movie_id") is not None else entry.get("movie")
+            movie_id = None
+            if movie_id_raw is not None:
+                try:
+                    movie_id = int(movie_id_raw)
+                except Exception:
+                    # not an int; maybe it's a title string
+                    movie_id = None
+
+            if movie_id is None and entry.get("title"):
+                movie_id = _find_movie_id_by_title(conn, entry.get("title"))
+
+            if movie_id is None and entry.get("title") is None:
+                # last attempt: if entry has a 'movie' that's a string treat as title
+                m = entry.get("movie")
+                if isinstance(m, str):
+                    movie_id = _find_movie_id_by_title(conn, m)
+
+            if movie_id is None:
+                logger.debug(f"Skipping rating entry without resolvable movie_id: {entry}")
                 continue
-            movie_id, rating, ts = parsed
 
-            cursor.execute("DELETE FROM ratings WHERE user_id = ? AND movie_id = ?", (uid, movie_id))
-            cursor.execute(
+            rating = entry.get("rating")
+            if rating is None:
+                logger.debug(f"Skipping rating entry without rating value: {entry}")
+                continue
+            try:
+                rating_val = float(rating)
+            except Exception:
+                logger.debug(f"Skipping rating with non-numeric value: {entry}")
+                continue
+
+            timestamp = int(entry.get("timestamp") or time.time())
+            cur.execute(
                 "INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES (?, ?, ?, ?)",
-                (uid, movie_id, rating, ts)
+                (uid, movie_id, rating_val, timestamp),
             )
-            synced += 1
+            inserted += 1
+
         conn.commit()
-        print(f"(Sync) Synced {synced} ratings for user {user_id}.")
-    finally:
         conn.close()
+        logger.info(f"sync_user_ratings: user {username} (id={uid}) - inserted {inserted} ratings")
+        return True
+    except Exception:
+        logger.exception("Failed to sync profile to DB")
+        return False

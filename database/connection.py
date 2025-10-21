@@ -1,27 +1,27 @@
 """
 connection.py
-Centralizes the PostgreSQL database connection helper.
+Centralizes the SQLite database connection helper.
 
 Functions:
-- get_db(readonly: bool = False) -> psycopg2.Connection
+- get_db(readonly: bool = False) -> sqlite3.Connection
 """
 
 from __future__ import annotations
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import sqlite3
+from pathlib import Path
 
-# --- PostgreSQL connection configuration ---
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "movies")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+# --- SQLite connection configuration ---
+# Path to the SQLite DB file (used across the app)
+DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).resolve().parent / "movies.db"))
 
-def get_db(readonly: bool = False):
+# ensure directory exists
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+def get_db(readonly: bool = False) -> sqlite3.Connection:
     """
-    Returns a PostgreSQL connection object.
-    Uses environment variables for credentials.
+    Returns a SQLite connection object. If readonly is True, opens the DB in read-only mode.
+    Connection.row_factory = sqlite3.Row so callers can access columns by name.
 
     Example:
         conn = get_db()
@@ -29,19 +29,12 @@ def get_db(readonly: bool = False):
         cur.execute("SELECT * FROM movies LIMIT 5;")
         rows = cur.fetchall()
     """
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        cursor_factory=RealDictCursor,
-    )
-
-    # Set read-only mode if requested
     if readonly:
-        conn.set_session(readonly=True, autocommit=True)
+        # open readonly via URI mode
+        uri = f"file:{DB_PATH}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
     else:
-        conn.autocommit = True
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
 
+    conn.row_factory = sqlite3.Row
     return conn

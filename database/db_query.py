@@ -32,15 +32,34 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
         conn.close()
 
 
-def search_movies_by_keyword(keyword):
+def search_movies_by_keyword(keyword: str, limit: int = 20):
     from database.connection import get_db
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("""
-        SELECT title, year, rating
+    db = get_db(readonly=True)
+    cur = db.cursor()
+    q = f"%{keyword.strip()}%"
+    cur.execute(
+        """
+        SELECT movie_id, title, year, genres
         FROM movies
-        WHERE title LIKE ?
-        LIMIT 20
-    """, (f"%{keyword}%",))
-    rows = cursor.fetchall()
-    return [{"title": r[0], "year": r[1], "rating": r[2]} for r in rows]
+        WHERE LOWER(title) LIKE LOWER(?)
+        ORDER BY title ASC
+        LIMIT ?
+        """,
+        (q, limit),
+    )
+    rows = cur.fetchall()
+    # rows are sqlite3.Row or tuples
+    results = []
+    for r in rows:
+        try:
+            mid = int(r["movie_id"]) if "movie_id" in r.keys() else int(r[0])
+            title = r["title"] if "title" in r.keys() else r[1]
+            year = r["year"] if "year" in r.keys() else r[2]
+            genres = r["genres"] if "genres" in r.keys() else (r[3] if len(r) > 3 else None)
+        except Exception:
+            # fallback tuple unpack
+            mid, title, year, *rest = r
+            genres = rest[0] if rest else None
+        results.append({"movie_id": mid, "title": title, "year": year, "genres": genres})
+    db.close()
+    return results

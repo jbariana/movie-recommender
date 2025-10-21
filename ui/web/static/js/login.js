@@ -1,66 +1,64 @@
 // get references to important HTML elements used for login and session display
 const loginForm = document.getElementById("login_form");
-const loginInput = document.getElementById("username"); //<input> field where user types their username
-const loginButton = document.getElementById("login_button"); //button that triggers login
-const loginStatus = document.getElementById("login_status"); //element to show login result message (success/error)
-const checkSessionButton = document.getElementById("check_session_button"); //optional button to check current session
-const sessionStatus = document.getElementById("session_status"); //element to display session info
+const loginInput = document.getElementById("username");
+const loginStatus = document.getElementById("login_status");
 
-// keep original logged-out markup so we can restore it on logout
+// Keep a copy of logged-out markup so we can restore it
 const LOGGED_OUT_HTML = loginForm ? loginForm.innerHTML : "";
 
-// render logged-in UI (username + logout)
 function renderLoggedIn(username) {
   if (!loginForm) return;
   loginForm.innerHTML = `
     <span class="nav-username" id="nav_username">${username}</span>
     <button id="logout_button" type="button">Logout</button>
-    <small id="login_status" class="login-status" aria-live="polite"></small>
+    <small id="login_status" class="login-status" aria-live="polite">Logged in</small>
   `;
-  // mark page as logged-in so nav styling can adjust
   document.body.classList.add("logged-in");
 
-  const logoutButton = document.getElementById("logout_button");
-  const newLoginStatus = document.getElementById("login_status");
-  if (newLoginStatus) newLoginStatus.textContent = `Logged in as ${username}`;
-  logoutButton?.addEventListener("click", async () => {
-    try {
-      const res = await fetch("/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      await res.json();
-      renderLoggedOut();
-    } catch (err) {
-      newLoginStatus.textContent = "Logout failed.";
-      console.error(err);
-    }
-  });
+  document
+    .getElementById("logout_button")
+    .addEventListener("click", async () => {
+      try {
+        const res = await fetch("/logout", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        await res.json().catch(() => {});
+        renderLoggedOut();
+      } catch (err) {
+        const s = document.getElementById("login_status");
+        if (s) s.textContent = "Logout failed.";
+        console.error(err);
+      }
+    });
 }
 
-// restore logged-out form
 function renderLoggedOut() {
   if (!loginForm) return;
   loginForm.innerHTML = LOGGED_OUT_HTML;
-  // remove logged-in marker so nav reverts
   document.body.classList.remove("logged-in");
-  // re-wire the original handlers (re-initialize this module)
   initLoginHandlers();
 }
 
-// initialize login handlers (callable to re-wire after DOM replace)
+function showStatus(msg, isError = false) {
+  const s = document.getElementById("login_status");
+  if (!s) return;
+  s.textContent = msg;
+  s.style.color = isError ? "#ff8b8b" : "";
+}
+
 function initLoginHandlers() {
-  const input = document.getElementById("username");
   const btn = document.getElementById("login_button");
-  const status = document.getElementById("login_status");
+  const input = document.getElementById("username");
   if (!btn || !input) return;
 
-  btn.addEventListener("click", async () => {
+  btn.onclick = async () => {
     const username = input.value.trim();
     if (!username) {
-      status && (status.textContent = "Enter a username.");
+      showStatus("Enter a username.", true);
       return;
     }
+    showStatus("Logging in...");
     try {
       const res = await fetch("/login", {
         method: "POST",
@@ -68,48 +66,39 @@ function initLoginHandlers() {
         body: JSON.stringify({ username }),
         credentials: "same-origin",
       });
-      const data = await res.json();
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+
       if (res.ok) {
-        // show username and logout button
         renderLoggedIn(username);
       } else {
-        status &&
-          (status.textContent = data.error || data.message || "Login failed.");
+        const errMsg =
+          data?.error || data?.message || res.statusText || "Login failed";
+        showStatus(`Error logging in: ${errMsg}`, true);
+        console.error("Login failed:", res.status, text);
       }
     } catch (err) {
-      status && (status.textContent = "Error logging in.");
+      showStatus("Error logging in (network).", true);
       console.error(err);
     }
-  });
+  };
 }
 
-// optional session check on load to show logged-in user if session exists
+// Check session on load and render if set
 async function checkSessionOnLoad() {
   try {
     const res = await fetch("/session", { credentials: "same-origin" });
     if (!res.ok) return;
     const data = await res.json();
-    const username = data?.username;
-    if (username) renderLoggedIn(username);
-  } catch (err) {
-    // ignore
-  }
+    if (data?.username) renderLoggedIn(data.username);
+  } catch (e) {}
 }
 
-// wire up check-session button (if present)
-if (checkSessionButton) {
-  checkSessionButton.addEventListener("click", async () => {
-    try {
-      const res = await fetch("/session", { credentials: "same-origin" });
-      const data = await res.json();
-      sessionStatus.textContent = JSON.stringify(data);
-    } catch (err) {
-      sessionStatus.textContent = "Error checking session.";
-      console.error(err);
-    }
-  });
-}
-
-// bootstrap
 initLoginHandlers();
 checkSessionOnLoad();

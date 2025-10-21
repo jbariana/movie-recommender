@@ -1,24 +1,48 @@
 from pathlib import Path
 import json
 import time
+import logging
 from collections import Counter
 from database.id_to_title import id_to_title, normalize_title
+
+logger = logging.getLogger(__name__)
 
 PROFILE_PATH = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
 
 
 def _resolve_title_from_entry(entry):
+    """
+    Return a human-friendly title for a rating entry.
+    Accepts entries that may have 'title', 'movie' (string or id) or 'movie_id'.
+    """
+    if not entry:
+        return None
+
+    # explicit title field wins
     if entry.get("title"):
-        return normalize_title(entry.get("title"))
-    mid = entry.get("movie_id") if entry.get("movie_id") is not None else entry.get("movie")
-    if mid is None:
-        return "Untitled"
-    try:
-        mid_int = int(mid)
-        title = id_to_title(mid_int)
-        return title or f"Movie ID {mid_int}"
-    except Exception:
-        return normalize_title(str(mid))
+        return normalize_title(str(entry.get("title")))
+
+    # movie field might be title or id
+    m = entry.get("movie")
+    if m is not None:
+        try:
+            mid = int(m)
+            t = id_to_title(mid)
+            return t if t else f"ID {mid}"
+        except Exception:
+            return normalize_title(str(m))
+
+    # movie_id numeric id
+    mid = entry.get("movie_id")
+    if mid is not None:
+        try:
+            mid_i = int(mid)
+            t = id_to_title(mid_i)
+            return t if t else f"ID {mid_i}"
+        except Exception:
+            return normalize_title(str(mid))
+
+    return None
 
 
 def handle_button_click(button_id, payload=None):
@@ -26,15 +50,18 @@ def handle_button_click(button_id, payload=None):
 
     # --- View Ratings ---
     if button_id == "view_ratings_button":
-        # Read local profile and resolve titles for each rating so the UI shows titles
-        data = json.loads(PROFILE_PATH.read_text())
+        try:
+            data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            data = {"username": None, "user_id": None, "ratings": []}
+
         results = []
         for r in data.get("ratings", []):
-            title = _resolve_title_from_entry(r)
+            title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
             results.append({
-                "movie_id": r.get("movie_id"),
+                "movie_id": r.get("movie_id") if r.get("movie_id") is not None else r.get("movie"),
                 "title": title,
-                "movie": title,              # ensure UI sees a title in both keys
+                "movie": title,  # legacy keys front-end may expect
                 "rating": r.get("rating"),
                 "timestamp": r.get("timestamp"),
             })
@@ -98,99 +125,115 @@ def handle_button_click(button_id, payload=None):
 
     # --- Add Rating ---
     if button_id == "add_rating_submit":
-        movie_id = payload.get("movie_id")
+        movie_id = payload.get("movie_id") or payload.get("movie")
         rating = payload.get("rating")
-
-        if not movie_id:
-            return {"ok": False, "error": "No movie ID provided."}
+        if movie_id is None:
+            return {"ok": False, "error": "No movie_id provided."}
         if rating is None:
             return {"ok": False, "error": "No rating provided."}
 
         try:
-            data = json.loads(PROFILE_PATH.read_text())
+            # read or create profile JSON
+            if PROFILE_PATH.exists():
+                prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+            else:
+                prof = {"username": None, "user_id": None, "ratings": []}
 
-            # Remove previous rating for the same movie
-            data["ratings"] = [
-                r for r in data.get("ratings", [])
-                if str(r.get("movie_id")) != str(movie_id)
+            # normalize numeric movie id when possible
+            try:
+                mid_val = int(movie_id)
+            except Exception:
+                mid_val = None
+
+            # remove any existing rating for same movie
+            prof["ratings"] = [
+                r for r in prof.get("ratings", [])
+                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
             ]
 
-            # Add new rating (store ints where sensible)
             new_entry = {
-                "movie_id": int(movie_id) if str(movie_id).isdigit() else movie_id,
-                "rating": int(rating),
+                "movie_id": mid_val if mid_val is not None else movie_id,
+                "rating": float(rating),
                 "timestamp": int(time.time())
             }
-            data["ratings"].append(new_entry)
-            PROFILE_PATH.write_text(json.dumps(data, indent=2))
+            prof.setdefault("ratings", []).append(new_entry)
+            PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
 
-            # Sync the entire profile JSON to the DB
+            # attempt sync to DB (best-effort)
             try:
                 from api.sync_user_json import sync_user_ratings
                 sync_user_ratings(PROFILE_PATH)
-            except Exception as ex_sync:
-                # don't hard-fail UI; return notice instead
-                return {"ok": True, "message": f"Rating saved locally but sync failed: {ex_sync}", "ratings": data["ratings"], "source": "profile"}
+            except Exception as ex:
+                logger.warning("sync_user_ratings failed on add: %s", ex)
 
-            # Return updated list
+            # return updated ratings with titles
             results = []
-            for r in data["ratings"]:
-                title = _resolve_title_from_entry(r)
-                results.append({
-                    "title": title,
-                    "rating": r.get("rating"),
-                    "timestamp": r.get("timestamp")
-                })
+            for r in prof.get("ratings", []):
+                title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
+                results.append({"title": title, "rating": r.get("rating"), "movie_id": r.get("movie_id"), "timestamp": r.get("timestamp")})
 
-            return {
-                "ok": True,
-                "message": f"Added rating {rating} for movie ID {movie_id}.",
-                "ratings": results,
-                "source": "profile"
-            }
+            return {"ok": True, "message": "Rating saved.", "ratings": results, "source": "profile"}
 
         except Exception as ex:
-            return {"ok": False, "error": f"Failed to update: {ex}"}
+            logger.exception("Failed to add rating")
+            return {"ok": False, "error": str(ex)}
 
     # --- Remove Rating ---
     if button_id == "remove_rating_button":
-        movie_id = payload.get("movie_id")
-        if not movie_id:
-            return {"ok": False, "error": "No movie ID provided."}
+        movie_id = payload.get("movie_id") or payload.get("movie")
+        if movie_id is None:
+            return {"ok": False, "error": "No movie_id provided."}
 
         try:
-            data = json.loads(PROFILE_PATH.read_text())
-            before = len(data.get("ratings", []))
-            data["ratings"] = [
-                r for r in data.get("ratings", [])
-                if str(r.get("movie_id")) != str(movie_id)
-            ]
-            after = len(data["ratings"])
-            PROFILE_PATH.write_text(json.dumps(data, indent=2))
+            if PROFILE_PATH.exists():
+                prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+            else:
+                prof = {"username": None, "user_id": None, "ratings": []}
 
-            # Sync whole profile to DB
+            before = len(prof.get("ratings", []))
+            prof["ratings"] = [
+                r for r in prof.get("ratings", [])
+                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
+            ]
+            after = len(prof.get("ratings", []))
+            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
+
             try:
                 from api.sync_user_json import sync_user_ratings
                 sync_user_ratings(PROFILE_PATH)
-            except Exception as ex_sync:
-                return {"ok": True, "message": f"Removed locally but sync failed: {ex_sync}", "ratings": data["ratings"], "source": "profile"}
+            except Exception as ex:
+                logger.warning("sync_user_ratings failed on remove: %s", ex)
 
-            removed = before != after
-            return {
-                "ok": True,
-                "message": "Rating removed." if removed else "No rating found for that movie ID.",
-                "ratings": data["ratings"],
-                "source": "profile"
-            }
-
+            return {"ok": True, "message": "Removed." if before != after else "No rating found.", "ratings": prof.get("ratings", []), "source": "profile"}
         except Exception as ex:
-            return {"ok": False, "error": f"Failed to remove rating: {ex}"}
+            logger.exception("Failed to remove rating")
+            return {"ok": False, "error": str(ex)}
 
-    # --- Default ---
-    return {
-        "ratings": [
-            {"title": "Inception", "rating": 5},
-            {"title": "Titanic", "rating": 4},
-        ],
-        "source": "fallback",
-    }
+    # --- Search ---
+    if button_id == "search":
+        query = (payload or {}).get("query") or ""
+        query = str(query).strip()
+        if not query:
+            return {"ratings": [], "source": "search", "query": query}
+        try:
+            from database.db_query import search_movies_by_keyword
+            rows = search_movies_by_keyword(query, limit=30)
+            results = []
+            for r in rows:
+                title = r.get("title") or (id_to_title(r.get("movie_id")) if r.get("movie_id") else None)
+                display = title if title else (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
+                results.append({
+                    "movie_id": r.get("movie_id"),
+                    "title": display,
+                    "movie": display,
+                    "year": r.get("year"),
+                    "genres": r.get("genres"),
+                })
+            return {"ratings": results, "source": "search", "query": query}
+        except Exception as ex:
+            logger.exception("Search failed")
+            return {"ratings": [], "source": "search", "error": str(ex)}
+
+    # --- Get Recommendations / Search / other actions are handled elsewhere in codebase ---
+    return {"error": f"Unhandled button id: {button_id}"}

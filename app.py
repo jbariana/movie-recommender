@@ -5,6 +5,7 @@ import sqlite3
 import traceback
 import random
 from datetime import timedelta
+import json
 
 app = Flask(
     __name__,
@@ -89,6 +90,78 @@ def index():
 def random_movie_route():
     movie = randomize_movie()
     return jsonify({"random_movie": movie})
+
+
+PROFILE_PATH = Path(__file__).resolve().parent / "user_profile" / "user_profile.json"
+PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+@app.route("/local-login", methods=["POST"])
+def local_login():
+    payload = request.get_json() or {}
+    username = payload.get("username")
+    if not username:
+        return jsonify({"error": "username required"}), 400
+
+    session["username"] = username
+
+    # Resolve/create numeric user id and load ratings from DB
+    uid = None
+    ratings = []
+    try:
+        from database.connection import get_db
+        conn = get_db(readonly=False)
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        row = cur.fetchone()
+        if row:
+            try:
+                uid = int(row["user_id"])
+            except Exception:
+                uid = int(row[0])
+        else:
+            cur.execute("INSERT INTO users (username) VALUES (?)", (username,))
+            conn.commit()
+            uid = int(cur.lastrowid)
+
+        # load existing ratings for this uid
+        cur.execute("SELECT movie_id, rating, timestamp FROM ratings WHERE user_id = ?", (uid,))
+        rows = cur.fetchall()
+        for r in rows:
+            # rows may be sqlite3.Row or tuple
+            try:
+                mid = int(r["movie_id"]) if "movie_id" in r.keys() else int(r[0])
+                rating_val = r["rating"] if "rating" in r.keys() else r[1]
+                ts = int(r["timestamp"]) if "timestamp" in r.keys() else int(r[2])
+            except Exception:
+                # fallback generic tuple mapping
+                try:
+                    mid, rating_val, ts = int(r[0]), r[1], int(r[2])
+                except Exception:
+                    continue
+            ratings.append({"movie_id": mid, "rating": rating_val, "timestamp": ts})
+        conn.close()
+    except Exception as ex:
+        logger.exception("local-login DB lookup failed")
+        uid = None
+        ratings = []
+
+    profile = {"username": username, "user_id": uid if uid is not None else username, "ratings": ratings}
+    try:
+        PROFILE_PATH.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+    except Exception as ex:
+        logger.exception("Failed to write local profile JSON")
+        return jsonify({"error": f"persist failed: {ex}"}), 500
+
+    # best-effort: sync JSON -> DB (should be no-op because we just loaded DB rows)
+    try:
+        from api.sync_user_json import sync_user_ratings
+        ok = sync_user_ratings(PROFILE_PATH)
+        if not ok:
+            logger.warning("sync_user_ratings returned False after local-login")
+    except Exception:
+        logger.exception("sync_user_ratings failed after local-login")
+
+    return jsonify({"message": "logged in (local)", "username": username, "user_id": uid}), 200
 
 
 if __name__ == "__main__":

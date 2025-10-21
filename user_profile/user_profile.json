@@ -1,11 +1,11 @@
 {
   "username": "hello",
-  "user_id": "hello",
+  "user_id": 1,
   "ratings": [
     {
       "movie_id": 3,
-      "rating": 3,
-      "timestamp": 1761062017
+      "rating": 3.0,
+      "timestamp": 1761064251
     }
   ]
 }

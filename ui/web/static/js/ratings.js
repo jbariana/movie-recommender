@@ -89,16 +89,33 @@ if (addSubmit) {
         credentials: "same-origin",
       });
 
-      const data = await res.json();
+      // always capture raw text for debugging
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { text };
+      }
+
+      if (!res.ok) {
+        console.error("Add rating failed", res.status, text);
+        outputDiv.textContent =
+          data?.error || data?.message || `Server error (${res.status})`;
+        return;
+      }
+
       if (data?.ok) {
         outputDiv.textContent = data.message || "Rating added successfully.";
         hideAddBox();
       } else {
-        outputDiv.textContent = data?.error || "Failed to add rating.";
+        console.warn("Backend returned non-ok payload for add:", data);
+        outputDiv.textContent =
+          data?.error || data?.message || "Failed to add rating.";
       }
     } catch (err) {
       outputDiv.textContent = "Error contacting backend.";
-      console.error(err);
+      console.error("Network error adding rating:", err);
     }
   });
 }
