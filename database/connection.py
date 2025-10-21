@@ -1,29 +1,47 @@
 """
 connection.py
-Centralizes the SQLite database location and connection helper.
+Centralizes the PostgreSQL database connection helper.
 
 Functions:
-- get_db(readonly: bool = False) -> sqlite3.Connection
+- get_db(readonly: bool = False) -> psycopg2.Connection
 """
 
 from __future__ import annotations
 import os
-import sqlite3
-from pathlib import Path
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-# Database lives inside the repository under /database
-DB_DIR = Path(__file__).resolve().parent
-DB_PATH = DB_DIR / "movies.db"
+# --- PostgreSQL connection configuration ---
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "movies")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 
-def get_db(readonly: bool = False) -> sqlite3.Connection:
+def get_db(readonly: bool = False):
     """
-    Returns a sqlite3 connection.
-    Set readonly=True for SELECT-only operations (safer for API endpoints).
+    Returns a PostgreSQL connection object.
+    Uses environment variables for credentials.
+
+    Example:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM movies LIMIT 5;")
+        rows = cur.fetchall()
     """
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        cursor_factory=RealDictCursor,
+    )
+
+    # Set read-only mode if requested
     if readonly:
-        # URI mode for read-only connection
-        uri = f"file:{DB_PATH.as_posix()}?mode=ro"
-        return sqlite3.connect(uri, uri=True, check_same_thread=False)
-    # Ensure directory exists
-    os.makedirs(DB_DIR, exist_ok=True)
-    return sqlite3.connect(DB_PATH.as_posix(), check_same_thread=False)
+        conn.set_session(readonly=True, autocommit=True)
+    else:
+        conn.autocommit = True
+
+    return conn

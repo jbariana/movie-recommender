@@ -1,7 +1,9 @@
-from flask import Flask, render_template, session
+from flask import Flask, render_template, request, jsonify, session
 from pathlib import Path
 import logging
+import sqlite3
 import traceback
+import random
 from datetime import timedelta
 
 app = Flask(
@@ -27,6 +29,8 @@ try:
 except Exception:
     DB_CONN_PATH = Path("data/ml-latest-small/movies.db")
 
+
+# Helper function to initialize database if needed
 def init():
     if DB_CONN_PATH.exists():
         logger.info("Database already exists, skipping initialization.")
@@ -44,16 +48,48 @@ def init():
         logger.error("Database initialization failed:")
         traceback.print_exc()
 
+
 init()
 
 # Import and register API blueprint after init()
 from api.routes import api_bp
 app.register_blueprint(api_bp)
 
+
+# ------------------- Random movie helpers -------------------
+def get_all_movies():
+    try:
+        conn = sqlite3.connect(DB_CONN_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, title FROM movies")  # Assuming 'movies' table exists
+        movies = cursor.fetchall()
+        conn.close()
+        return movies
+    except Exception as e:
+        logger.error(f"Error fetching movies: {e}")
+        return []
+
+
+def randomize_movie():
+    movies = get_all_movies()
+    if not movies:
+        return "No movies available."
+    movie_id, movie_title = random.choice(movies)
+    return f"Movie ID: {movie_id}, Title: {movie_title}"
+
+
+# ------------------- Flask routes -------------------
 @app.route("/")
 @app.route("/index")
 def index():
     return render_template("index.html")
+
+
+@app.route("/random_movie", methods=["GET"])
+def random_movie_route():
+    movie = randomize_movie()
+    return jsonify({"random_movie": movie})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
