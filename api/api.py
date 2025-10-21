@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import time
 from collections import Counter
 from database.id_to_title import id_to_title, normalize_title
 
@@ -25,16 +26,24 @@ def handle_button_click(button_id, payload=None):
 
     # --- View Ratings ---
     if button_id == "view_ratings_button":
+        # Read local profile and resolve titles for each rating so the UI shows titles
         data = json.loads(PROFILE_PATH.read_text())
         results = []
         for r in data.get("ratings", []):
             title = _resolve_title_from_entry(r)
             results.append({
+                "movie_id": r.get("movie_id"),
                 "title": title,
+                "movie": title,              # ensure UI sees a title in both keys
                 "rating": r.get("rating"),
-                "timestamp": r.get("timestamp")
+                "timestamp": r.get("timestamp"),
             })
-        return {"ratings": results, "source": "profile"}
+        return {
+            "ratings": results,
+            "source": "profile",
+            "username": data.get("username"),
+            "user_id": data.get("user_id"),
+        }
 
     # --- View Statistics ---
     if button_id == "view_statistics_button":
@@ -63,7 +72,13 @@ def handle_button_click(button_id, payload=None):
     # --- Get Recommendations ---
     if button_id == "get_rec_button":
         from recommender.baseline import recommend_titles_for_user
-        recs = recommend_titles_for_user(99)
+        try:
+            profile = json.loads(PROFILE_PATH.read_text())
+            uid = int(profile.get("user_id", 99))
+        except Exception:
+            uid = 99
+
+        recs = recommend_titles_for_user(uid)
 
         results = []
         for item in recs:
@@ -74,10 +89,10 @@ def handle_button_click(button_id, payload=None):
                     rating_val = float(score)
                 except Exception:
                     rating_val = None
-                results.append({"title": title, "rating": rating_val})
+                results.append({"title": title, "movie": title, "rating": rating_val})
             else:
                 title = _resolve_title_from_entry(item if isinstance(item, dict) else {"movie": item})
-                results.append({"title": title, "rating": None})
+                results.append({"title": title, "movie": title, "rating": None})
 
         return {"ratings": results, "source": "recs"}
 
@@ -100,18 +115,22 @@ def handle_button_click(button_id, payload=None):
                 if str(r.get("movie_id")) != str(movie_id)
             ]
 
-            # Add new rating
+            # Add new rating (store ints where sensible)
             new_entry = {
-                "movie_id": movie_id,
+                "movie_id": int(movie_id) if str(movie_id).isdigit() else movie_id,
                 "rating": int(rating),
-                "timestamp": "now"
+                "timestamp": int(time.time())
             }
             data["ratings"].append(new_entry)
             PROFILE_PATH.write_text(json.dumps(data, indent=2))
 
-            # Try syncing to DB
-            from api.sync_user_json import sync_user_ratings
-            sync_user_ratings(movie_id)
+            # Sync the entire profile JSON to the DB
+            try:
+                from api.sync_user_json import sync_user_ratings
+                sync_user_ratings(PROFILE_PATH)
+            except Exception as ex_sync:
+                # don't hard-fail UI; return notice instead
+                return {"ok": True, "message": f"Rating saved locally but sync failed: {ex_sync}", "ratings": data["ratings"], "source": "profile"}
 
             # Return updated list
             results = []
@@ -148,6 +167,13 @@ def handle_button_click(button_id, payload=None):
             ]
             after = len(data["ratings"])
             PROFILE_PATH.write_text(json.dumps(data, indent=2))
+
+            # Sync whole profile to DB
+            try:
+                from api.sync_user_json import sync_user_ratings
+                sync_user_ratings(PROFILE_PATH)
+            except Exception as ex_sync:
+                return {"ok": True, "message": f"Removed locally but sync failed: {ex_sync}", "ratings": data["ratings"], "source": "profile"}
 
             removed = before != after
             return {

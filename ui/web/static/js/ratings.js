@@ -25,11 +25,14 @@ addCancel.textContent = "Cancel";
 addCancel.id = "add_rating_cancel";
 
 //inject the form elements into the add rating box container
-addBox.innerHTML = "";
-addBox.append(addInputId, addInputRating, addSubmit, addCancel);
+if (addBox) {
+  addBox.innerHTML = "";
+  addBox.append(addInputId, addInputRating, addSubmit, addCancel);
+}
 
 //utility functions to toggle the visibility of the add rating box
 function hideAddBox() {
+  if (!addBox) return;
   addBox.classList.remove("visible");
   addBox.setAttribute("aria-hidden", "true");
   addInputId.value = "";
@@ -37,85 +40,93 @@ function hideAddBox() {
 }
 
 function showAddBox() {
+  if (!addBox) return;
   addBox.classList.add("visible");
   addBox.setAttribute("aria-hidden", "false");
-  addInputId.focus(); // Immediately focus for smoother UX
+  addInputId.focus();
 }
 
 //clicking the main “Add Rating” button toggles the add box visibility
-addBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  addBox.classList.contains("visible") ? hideAddBox() : showAddBox();
-});
+if (addBtn) {
+  addBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    addBox &&
+      (addBox.classList.contains("visible") ? hideAddBox() : showAddBox());
+  });
+}
 
 //“Cancel” button closes the box and clears inputs
-addCancel.addEventListener("click", (e) => {
-  e.preventDefault();
-  hideAddBox();
-});
+if (addCancel) {
+  addCancel.addEventListener("click", (e) => {
+    e.preventDefault();
+    hideAddBox();
+  });
+}
 
 //handle “Submit” click — sends rating data to backend
-addSubmit.addEventListener("click", async (e) => {
-  e.preventDefault();
-  const movieId = addInputId.value.trim();
-  const rating = addInputRating.value.trim();
+if (addSubmit) {
+  addSubmit.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const movieId = addInputId.value.trim();
+    const rating = addInputRating.value.trim();
 
-  if (!movieId || !rating) {
-    outputDiv.textContent = "Please enter both Movie ID and Rating.";
-    return;
-  }
-
-  outputDiv.textContent = "Adding rating...";
-
-  try {
-    // POST to backend with relevant rating data
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        button: "add-rating",
-        movie_id: movieId,
-        rating: rating,
-      }),
-      credentials: "same-origin", // ensures session cookies are sent
-    });
-
-    //handle backend response
-    const data = await res.json();
-    if (data?.ok) {
-      outputDiv.textContent = data.message || "Rating added successfully.";
-      hideAddBox();
-    } else {
-      outputDiv.textContent = data?.error || "Failed to add rating.";
+    if (!movieId || !rating) {
+      outputDiv.textContent = "Please enter both Movie ID and Rating.";
+      return;
     }
-  } catch (err) {
-    //fallback for network or server errors
-    outputDiv.textContent = "Error contacting backend.";
-    console.error(err);
-  }
-});
+
+    outputDiv.textContent = "Adding rating...";
+
+    try {
+      const res = await fetch("/api/button-click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          button: "add_rating_submit",
+          movie_id: movieId,
+          rating: rating,
+        }),
+        credentials: "same-origin",
+      });
+
+      const data = await res.json();
+      if (data?.ok) {
+        outputDiv.textContent = data.message || "Rating added successfully.";
+        hideAddBox();
+      } else {
+        outputDiv.textContent = data?.error || "Failed to add rating.";
+      }
+    } catch (err) {
+      outputDiv.textContent = "Error contacting backend.";
+      console.error(err);
+    }
+  });
+}
 
 //simple prompt-based workflow to remove an existing rating
 const removeBtn = document.getElementById("remove_rating_button");
+if (removeBtn) {
+  removeBtn.addEventListener("click", async () => {
+    const movieId = prompt("Enter Movie ID to remove rating:");
+    if (!movieId) return;
 
-removeBtn.addEventListener("click", async () => {
-  const movieId = prompt("Enter Movie ID to remove rating:");
-  if (!movieId) return;
+    outputDiv.textContent = "Removing rating...";
+    try {
+      const res = await fetch("/api/button-click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          button: "remove_rating_button",
+          movie_id: movieId,
+        }),
+        credentials: "same-origin",
+      });
 
-  outputDiv.textContent = "Removing rating...";
-  try {
-    //send request to backend to remove the rating for given Movie ID
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ button: "remove-rating", movie_id: movieId }),
-      credentials: "same-origin",
-    });
-
-    const data = await res.json();
-    outputDiv.textContent = data?.message || data?.error || "Done.";
-  } catch (err) {
-    outputDiv.textContent = "Error contacting backend.";
-    console.error(err);
-  }
-});
+      const data = await res.json();
+      outputDiv.textContent = data?.message || data?.error || "Done.";
+    } catch (err) {
+      outputDiv.textContent = "Error contacting backend.";
+      console.error(err);
+    }
+  });
+}

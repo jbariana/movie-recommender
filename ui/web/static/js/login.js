@@ -1,61 +1,115 @@
 // get references to important HTML elements used for login and session display
+const loginForm = document.getElementById("login_form");
 const loginInput = document.getElementById("username"); //<input> field where user types their username
 const loginButton = document.getElementById("login_button"); //button that triggers login
 const loginStatus = document.getElementById("login_status"); //element to show login result message (success/error)
 const checkSessionButton = document.getElementById("check_session_button"); //optional button to check current session
 const sessionStatus = document.getElementById("session_status"); //element to display session info
 
-//when the login button is clicked, attempt to log the user in
-loginButton.addEventListener("click", async () => {
-  // Get the trimmed username from the input box
-  const username = loginInput.value.trim();
+// keep original logged-out markup so we can restore it on logout
+const LOGGED_OUT_HTML = loginForm ? loginForm.innerHTML : "";
 
-  try {
-    // Send a POST request to the Flask /login route
-    // The request includes the username in JSON format
-    // 'credentials: "same-origin"' ensures that cookies (including session cookies) are sent and received
-    const res = await fetch("/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username }),
-      credentials: "same-origin",
-    });
+// render logged-in UI (username + logout)
+function renderLoggedIn(username) {
+  if (!loginForm) return;
+  loginForm.innerHTML = `
+    <span class="nav-username" id="nav_username">${username}</span>
+    <button id="logout_button" type="button">Logout</button>
+    <small id="login_status" class="login-status" aria-live="polite"></small>
+  `;
+  // mark page as logged-in so nav styling can adjust
+  document.body.classList.add("logged-in");
 
-    //wait for the server to respond and parse the JSON result
-    const data = await res.json();
-
-    //display the returned message (e.g., "Logged in as <name>") in the UI
-    loginStatus.textContent = data.message;
-  } catch (err) {
-    //if something goes wrong display error message
-    loginStatus.textContent = "Error logging in.";
-
-    //log detailed error info in the console for debugging
-    console.error(err);
-  }
-});
-
-//The check session button may not always exist (depends on the page layout)
-//Only add a listener if it’s present
-if (checkSessionButton) {
-  checkSessionButton.addEventListener("click", async () => {
+  const logoutButton = document.getElementById("logout_button");
+  const newLoginStatus = document.getElementById("login_status");
+  if (newLoginStatus) newLoginStatus.textContent = `Logged in as ${username}`;
+  logoutButton?.addEventListener("click", async () => {
     try {
-      //send a GET request to the Flask /session endpoint
-      //this endpoint returns the current session info (e.g., username)
-      const res = await fetch("/session", { credentials: "same-origin" });
-
-      //parse JSON response
-      const data = await res.json();
-
-      //display the session data in the UI
-      // JSON.stringify makes sure it's shown as readable text
-      sessionStatus.textContent = JSON.stringify(data);
+      const res = await fetch("/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      await res.json();
+      renderLoggedOut();
     } catch (err) {
-      //if an error occurs show error message
-      sessionStatus.textContent = "Error checking session.";
-
-      //log the detailed error to the browser console
+      newLoginStatus.textContent = "Logout failed.";
       console.error(err);
     }
   });
 }
+
+// restore logged-out form
+function renderLoggedOut() {
+  if (!loginForm) return;
+  loginForm.innerHTML = LOGGED_OUT_HTML;
+  // remove logged-in marker so nav reverts
+  document.body.classList.remove("logged-in");
+  // re-wire the original handlers (re-initialize this module)
+  initLoginHandlers();
+}
+
+// initialize login handlers (callable to re-wire after DOM replace)
+function initLoginHandlers() {
+  const input = document.getElementById("username");
+  const btn = document.getElementById("login_button");
+  const status = document.getElementById("login_status");
+  if (!btn || !input) return;
+
+  btn.addEventListener("click", async () => {
+    const username = input.value.trim();
+    if (!username) {
+      status && (status.textContent = "Enter a username.");
+      return;
+    }
+    try {
+      const res = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+        credentials: "same-origin",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // show username and logout button
+        renderLoggedIn(username);
+      } else {
+        status &&
+          (status.textContent = data.error || data.message || "Login failed.");
+      }
+    } catch (err) {
+      status && (status.textContent = "Error logging in.");
+      console.error(err);
+    }
+  });
+}
+
+// optional session check on load to show logged-in user if session exists
+async function checkSessionOnLoad() {
+  try {
+    const res = await fetch("/session", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const username = data?.username;
+    if (username) renderLoggedIn(username);
+  } catch (err) {
+    // ignore
+  }
+}
+
+// wire up check-session button (if present)
+if (checkSessionButton) {
+  checkSessionButton.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/session", { credentials: "same-origin" });
+      const data = await res.json();
+      sessionStatus.textContent = JSON.stringify(data);
+    } catch (err) {
+      sessionStatus.textContent = "Error checking session.";
+      console.error(err);
+    }
+  });
+}
+
+// bootstrap
+initLoginHandlers();
+checkSessionOnLoad();
