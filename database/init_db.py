@@ -1,9 +1,6 @@
 """
 init_db.py
 Creates the SQLite schema for the movie recommender.
-
-Run:
-    python -m database.init_db
 """
 
 from __future__ import annotations
@@ -12,6 +9,11 @@ from .connection import get_db
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT UNIQUE
+);
 
 CREATE TABLE IF NOT EXISTS movies (
     movie_id     INTEGER PRIMARY KEY,
@@ -26,7 +28,8 @@ CREATE TABLE IF NOT EXISTS ratings (
     rating       REAL    NOT NULL,
     timestamp    INTEGER NOT NULL,
     PRIMARY KEY (user_id, movie_id, timestamp),
-    FOREIGN KEY (movie_id) REFERENCES movies(movie_id)
+    FOREIGN KEY (movie_id) REFERENCES movies(movie_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS tags (

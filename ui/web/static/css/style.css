@@ -1,103 +1,149 @@
+:root{
+  --bg:#0b1220;
+  --panel:#0e1724;
+  --muted:#9aa4b2;
+  --accent:#4fb6e6;
+  --accent-2:#6fd6b8;
+  --card:#0f1720;
+  --text:#e6eef6;
+}
+
+*{box-sizing:border-box}
 body {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #242424;
-    color: #eeeeee; 
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    min-height:100vh;
 }
 
-.header {
-    background-color: #141414;
-    text-align: center;
-    padding: 24px 12px;
+/* header */
+.header{
+  background: var(--panel);
+  border-bottom: 1px solid #0b1420;
+  padding: 14px 0;
+}
+.header-inner{
+  max-width:1100px;
+  margin:0 auto;
+  padding:0 16px;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  justify-content:space-between;
+}
+.header h1{
+  margin:0;
+  font-size:1.15rem;
+  font-weight:700;
+  color:var(--accent);
 }
 
-.header h1 {
-    margin: 0;
-    font-size: 1.6rem;
-    color: #ffffff;
-    line-height: 1;
+/* navigation bar */
+.nav-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  width:100%;
+}
+.nav-left{ display:flex; gap:8px; align-items:center; }
+.nav-tab{
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight:600;
+  transition: background 120ms ease;
+}
+.nav-tab:hover{ color: #fff; background: #0c1a2a; }
+.nav-tab[aria-current="page"], .nav-tab.active{
+  background: var(--card);
+  color: var(--accent);
+  border-color: #142433;
 }
 
+/* login form on nav-right */
+.nav-right{ display:flex; align-items:center; gap:8px; }
+.login-form{ display:flex; gap:8px; align-items:center; }
+.login-form input[type="text"]{
+  padding:8px 10px;
+  border-radius:6px;
+  border:1px solid #16242f;
+  background: #0c141b;
+  color: #fff;
+  width: 160px;
+}
+.login-form button{
+  padding:8px 12px;
+  border-radius:6px;
+  border:none;
+  background: var(--accent);
+  color: #021019;
+  font-weight:700;
+  cursor:pointer;
+}
+.login-status{
+  margin-left:8px;
+  color: var(--muted);
+  font-size:0.85rem;
+}
+
+/* main container */
 .container {
     max-width: 1100px;
-    margin: 32px auto;
+    margin: 26px auto;
     padding: 0 16px;
     display: flex;
-    flex-direction: column; /* stack top-row then output */
-    gap: 24px;
+    flex-direction: column;
+    gap: 20px;
     align-items: stretch;
 }
 
-/* new top-row holds the two side-by-side columns */
+/* layout top-row */
 .top-row {
     display: flex;
-    gap: 24px;
+    gap: 18px;
     align-items: flex-start;
 }
 
-/* left column - show user info / ratings */
-.user.section {
-    flex: 2;
-    background: transparent;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 20px 12px;
-    display: flex;
-    flex-direction: column;   /* stack items vertically */
-    gap: 12px;
-    align-items: stretch;
+/* user / action panels */
+.user.section, .action.section {
+    background: var(--card);
+    padding: 16px;
+    border-radius: 8px;
 }
+.user.section { flex: 2; }
+.action.section { flex: 1; display:flex; flex-direction:column; gap:12px; }
 
-/* right column - actions / controls */
-.action.section {
-    flex: 1;
-    background: transparent;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 20px 12px;
-    display: flex;
-    flex-direction: column;   /* stack items vertically */
-    gap: 12px;
-    align-items: stretch;
+/* section headings */
+.user.section h2, .action.section h2 { margin:0 0 8px 0; color:#dfe9f3; font-size:1rem; }
+
+/* action controls */
+.action-controls, .user-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.action-controls button, .user-controls button, .user.section button {
+  padding:8px 12px;
+  border-radius:6px;
+  border:1px solid transparent;
+  background:transparent;
+  color: var(--accent);
+  cursor:pointer;
+  font-weight:700;
 }
+.action-controls button:hover, .user-controls button:hover { background:#0c1a2a; }
 
-.user.section h2,
-.action.section h2 {
-    margin-top: 0;
-    margin-bottom: 12px;
-    font-size: 1.1rem;
-    color: #ffffff;
-}
-
-/* action buttons*/
-.action.section button,
-.user.section button {
-    background: transparent;
-    color: #ffffff;
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: transform 120ms ease, filter 120ms ease;
-    align-self: flex-start; 
-}
-
-
-.action.section button:focus,
-.user.section button:focus {
-    outline: 2px solid white;
-    outline-offset: 2px;
-}
-
+/* output area */
 #output {
     margin-top: 8px;
-    padding: 16px;
-    background-color: #1e1e1e;
-    border-radius: 2px;
-    color: #ffffff;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    padding: 12px;
+    background: var(--panel);
+    border-radius: 8px;
+    color: var(--text);
     width: 100%;
 }
 
@@ -126,7 +172,7 @@ body {
 /* movie rating */
 #output .movie-rating {
     font-weight: 400;
-    color: #ffffff; /* optional: orange/yellow for rating */
+    color: #ffffff;
 }
 
 .add-rating-box {
@@ -157,6 +203,7 @@ body {
     cursor: pointer;
 }
 
+/* responsive */
 @media (max-width: 640px) {
     .search-form input[type="text"] { width: 100%; }
     .search-form { flex-direction: column; gap: 10px; align-items: stretch; }
@@ -179,21 +226,21 @@ body {
     gap: 8px;
 }
 
-    .search-bar input {
-        padding: 8px;
-        flex: 1;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-    }
+.search-bar input {
+    padding: 8px;
+    flex: 1;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
 
-    .search-bar button {
-        padding: 8px 14px;
-        border: none;
-        background-color: #007bff;
-        color: white;
-        border-radius: 5px;
-        cursor: pointer;
-    }
+.search-bar button {
+    padding: 8px 14px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
 
 .results-container {
     margin-top: 20px;

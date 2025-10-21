@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 def init_database_and_sync(
     data_path: str = "data/ml-latest-small",
