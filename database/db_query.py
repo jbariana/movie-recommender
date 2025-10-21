@@ -31,3 +31,16 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
     finally:
         conn.close()
 
+
+def search_movies_by_keyword(keyword):
+    from database.connection import get_db
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT title, year, rating
+        FROM movies
+        WHERE title LIKE ?
+        LIMIT 20
+    """, (f"%{keyword}%",))
+    rows = cursor.fetchall()
+    return [{"title": r[0], "year": r[1], "rating": r[2]} for r in rows]

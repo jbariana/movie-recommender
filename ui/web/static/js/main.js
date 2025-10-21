@@ -168,3 +168,51 @@ document.querySelectorAll("button").forEach((button) => {
     }
   });
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+    const searchBtn = document.getElementById("searchBtn");
+    const searchInput = document.getElementById("searchInput");
+    const resultsDiv = document.getElementById("searchResults");
+
+    async function searchMovies() {
+        const query = searchInput.value.trim();
+        if (!query) {
+            resultsDiv.innerHTML = "<p>Please enter a keyword.</p>";
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+
+            if (res.ok) {
+                if (data.length === 0) {
+                    resultsDiv.innerHTML = "<p>No results found.</p>";
+                    return;
+                }
+
+                const html = data
+                    .map(
+                        (m) => `
+          <div class="movie-item">
+            <h3>${m.title}</h3>
+            <p>Year: ${m.year || "N/A"} | Rating: ${m.rating || "N/A"}</p>
+          </div>`
+                    )
+                    .join("");
+
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+            }
+        } catch (err) {
+            console.error(err);
+            resultsDiv.innerHTML = "<p>Something went wrong.</p>";
+        }
+    }
+
+    searchBtn.addEventListener("click", searchMovies);
+    searchInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") searchMovies();
+    });
+});

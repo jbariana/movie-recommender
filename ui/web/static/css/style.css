@@ -172,3 +172,36 @@ body {
         flex-direction: column;
     }
 }
+
+.search-bar {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+}
+
+    .search-bar input {
+        padding: 8px;
+        flex: 1;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+
+    .search-bar button {
+        padding: 8px 14px;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+.results-container {
+    margin-top: 20px;
+}
+
+.movie-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+}

@@ -1,16 +1,33 @@
 from flask import Blueprint, request, jsonify
-from api import api
+from database.connection import get_db
 
-api_bp = Blueprint("api_bp", __name__)
+api_bp = Blueprint("api", __name__, url_prefix="/api")
 
-@api_bp.route("/api/button-click", methods=["POST"])
-def button_click():
-    payload = request.get_json() or {}
-    button_id = payload.get("button")
-    print(f"Button clicked: {button_id}")
+@api_bp.route("/search", methods=["GET"])
+def search_movies():
+    """
+    Search movies by keyword and return basic info (title, year, rating)
+    """
+    keyword = request.args.get("q", "").strip().lower()
+    if not keyword:
+        return jsonify({"error": "Missing search keyword"}), 400
 
-    # pass the full payload to api handler so add-rating can include movie_id
-    result = api.handle_button_click(button_id, payload)
+    db = get_db()
+    cursor = db.cursor()
 
-    # Return its result (assuming it returns something JSON-serializable)
-    return jsonify(result)
+    query = """
+        SELECT title, year, rating
+        FROM movies
+        WHERE LOWER(title) LIKE ?
+        ORDER BY rating DESC
+        LIMIT 10;
+    """
+    cursor.execute(query, (f"%{keyword}%",))
+    results = cursor.fetchall()
+
+    movies = [
+        {"title": row[0], "year": row[1], "rating": row[2]}
+        for row in results
+    ]
+
+    return jsonify(movies)

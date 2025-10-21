@@ -65,19 +65,15 @@ class UserProfile:
         self.user_id = new_user_id
         self.to_file()
         
-    def randomize(self, num_ratings, start_id=20000):
+    def randomize(self, num_ratings):
+        import random
+        movie_ids = list(range(1, 9743))
         self.ratings = []
-        used_ids = set()
-        
         for _ in range(num_ratings):
-            while True:
-                fake_id = random.randint(start_id, start_id + 99999)
-                if fake_id not in used_ids:
-                    used_ids.add(fake_id)
-                    break
+            movie_id = random.choice(movie_ids)
             rating = random.randint(1, 5)
             self.ratings.append({
-                "movie_id": fake_id,
+                "movie_id": movie_id,
                 "rating": rating,
                 "timestamp": int(time.time())
             })
