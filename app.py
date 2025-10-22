@@ -1,12 +1,13 @@
 from flask import Flask, render_template, request, jsonify, session
 from pathlib import Path
 import logging
-import sqlite3
 import traceback
 import random
 from datetime import timedelta
 import json
 
+from database.connection import get_db
+from database.paramstyle import PH, IS_PG
 app = Flask(
     __name__,
     template_folder="ui/web/templates",
@@ -33,10 +34,6 @@ except Exception:
 
 # Helper function to initialize database if needed
 def init():
-    if DB_CONN_PATH.exists():
-        logger.info("Database already exists, skipping initialization.")
-        return
-
     try:
         from api.init_and_sync import init_database_and_sync
         profile_path = Path(__file__).parent / "user_profile" / "user_profile.json"
@@ -44,11 +41,10 @@ def init():
             data_path="data/ml-latest-small",
             profile_path=profile_path
         )
-        logger.info("Database initialized successfully.")
+        logger.info("Database initialized/loaded successfully.")
     except Exception:
         logger.error("Database initialization failed:")
         traceback.print_exc()
-
 
 init()
 
@@ -60,12 +56,10 @@ app.register_blueprint(api_bp)
 # ------------------- Random movie helpers -------------------
 def get_all_movies():
     try:
-        conn = sqlite3.connect(DB_CONN_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, title FROM movies")  # Assuming 'movies' table exists
-        movies = cursor.fetchall()
-        conn.close()
-        return movies
+        with get_db(readonly=True) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT movie_id, title FROM movies")
+            return cur.fetchall()
     except Exception as e:
         logger.error(f"Error fetching movies: {e}")
         return []
@@ -102,57 +96,44 @@ def local_login():
     if not username:
         return jsonify({"error": "username required"}), 400
 
+    # remember in session
     session["username"] = username
 
-    # Resolve/create numeric user id and load ratings from DB
-    uid = None
-    ratings = []
+    # --- DB: get-or-create user in ONE query (works on Postgres; also OK on SQLite if username is UNIQUE)
     try:
-        from database.connection import get_db
-        conn = get_db(readonly=False)
-        cur = conn.cursor()
-        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
-        row = cur.fetchone()
-        if row:
-            try:
-                uid = int(row["user_id"])
-            except Exception:
-                uid = int(row[0])
-        else:
-            cur.execute("INSERT INTO users (username) VALUES (?)", (username,))
-            conn.commit()
-            uid = int(cur.lastrowid)
+        with get_db(readonly=False) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                INSERT INTO users (username)
+                VALUES ({PH})
+                ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+                RETURNING user_id;
+                """,
+                (username,)
+            )
+            uid = int(cur.fetchone()[0])
 
-        # load existing ratings for this uid
-        cur.execute("SELECT movie_id, rating, timestamp FROM ratings WHERE user_id = ?", (uid,))
-        rows = cur.fetchall()
-        for r in rows:
-            # rows may be sqlite3.Row or tuple
-            try:
-                mid = int(r["movie_id"]) if "movie_id" in r.keys() else int(r[0])
-                rating_val = r["rating"] if "rating" in r.keys() else r[1]
-                ts = int(r["timestamp"]) if "timestamp" in r.keys() else int(r[2])
-            except Exception:
-                # fallback generic tuple mapping
-                try:
-                    mid, rating_val, ts = int(r[0]), r[1], int(r[2])
-                except Exception:
-                    continue
-            ratings.append({"movie_id": mid, "rating": rating_val, "timestamp": ts})
-        conn.close()
-    except Exception as ex:
-        logger.exception("local-login DB lookup failed")
-        uid = None
-        ratings = []
+            # fetch this user's ratings
+            cur.execute(
+                f"SELECT movie_id, rating, timestamp FROM ratings WHERE user_id = {PH}",
+                (uid,)
+            )
+            rows = cur.fetchall()
+            ratings = [{"movie_id": int(m), "rating": float(r), "timestamp": int(ts)} for (m, r, ts) in rows]
+    except Exception:
+        logger.exception("local-login DB upsert/lookup failed")
+        return jsonify({"error": "database error during login"}), 500
 
-    profile = {"username": username, "user_id": uid if uid is not None else username, "ratings": ratings}
+    # --- persist a local profile JSON (optional/helper)
+    profile = {"username": username, "user_id": uid, "ratings": ratings}
     try:
         PROFILE_PATH.write_text(json.dumps(profile, indent=2), encoding="utf-8")
     except Exception as ex:
         logger.exception("Failed to write local profile JSON")
         return jsonify({"error": f"persist failed: {ex}"}), 500
 
-    # best-effort: sync JSON -> DB (should be no-op because we just loaded DB rows)
+    # --- optional sync after login
     try:
         from api.sync_user_json import sync_user_ratings
         ok = sync_user_ratings(PROFILE_PATH)
@@ -162,7 +143,6 @@ def local_login():
         logger.exception("sync_user_ratings failed after local-login")
 
     return jsonify({"message": "logged in (local)", "username": username, "user_id": uid}), 200
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
