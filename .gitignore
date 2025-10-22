@@ -34,3 +34,9 @@ htmlcov/
 
 # Data archives (keep CSVs, ignore zips)
 data/*.zip
+
+# local env
+.env
+
+# local profile runtime file
+user_profile/user_profile.json
