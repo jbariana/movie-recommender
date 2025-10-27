@@ -105,3 +105,16 @@ def button_click():
     except Exception as ex:
         logger.exception("Error in handle_button_click")
         return jsonify({"error": str(ex)}), 500
+
+from database.connection import get_db
+
+def save_rating(user_id, movie_id, rating):
+    """
+    Save a user's rating for a movie into the database.
+    """
+    db = get_db()
+    db.execute(
+        "INSERT INTO user_ratings (user_id, movie_id, rating) VALUES (?, ?, ?)",
+        (user_id, movie_id, rating)
+    )
+    db.commit()
