@@ -1,90 +1,179 @@
-# Movie Recommender v0.2
+# Movie Recommender v0.5
 
 ## Overview
 
-Uses Python to generate AI-based movie recommendations from public datasets (MovieLens) and user ratings. This repo includes a SQLite database loader, a baseline recommender, and a simple CLI to print Top-K picks.
+AI-powered movie recommendation system using collaborative filtering on the MovieLens dataset and other user ratings.
+
+## Features
+
+- Browse and search 9,000+ movies with real-time autocomplete
+- Rate movies with interactive 5-star modal
+- Get AI-powered personalized recommendations using item-item collaborative filtering
+- Dual search: autocomplete dropdown + full results page
+- User profile with complete rating history
+- Rating statistics and insights
+
+## Tech Stack
+
+**Backend:** Python 3.x, Flask, PostgreSQL (Supabase) / SQLite, scikit-learn, pandas, numpy  
+**Frontend:** Vanilla JavaScript (modular ES6), CSS3  
+**Data:** MovieLens 25M dataset with TMDB poster integration
+
+## Installation
+
+```bash
+# 1. Clone repository
+git clone <url>
+cd movie-recommender
+
+# 2. Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Set up environment variables
+# Create a .env file in the root directory with:
+DATABASE_URL=your_postgres_url
+SECRET_KEY=your_secret_key_here
+
+# 5. Run application
+python app.py
+
+# 6. Open browser
+# Navigate to http://localhost:8000
+```
+
+## First Time Setup
+
+On first run if DB is not initialized, the app will automatically:
+
+1. Initialize database schema (movies, ratings, links tables)
+2. Populate with MovieLens data
+3. Sync any existing user ratings from `user_profile/user_profile.json`
+
+## Usage
+
+1. **Login**: Enter any username (no password required for demo)
+2. **Search**: Type 2+ characters to see autocomplete suggestions, or press Enter for full results
+3. **Rate Movies**: Click any movie card to open the 5-star rating modal
+4. **Get Recommendations**: Click "Browse" to see personalized recommendations
+5. **View Profile**: Click "Profile" to see all your ratings
+6. **Statistics**: Click "View Statistics" for rating insights
 
 ## Project Structure
 
-```plaintext
-movie_recommender/
-├── .vscode/
-│   └── settings.json               # VS Code Python settings / interpreter path
-├── api/                            # API's that will be exposed to frontend
-│   └── init_and_sync.py            # initializes and syncs database with csv data/json local user profile data
-│
-├── data/                           # Raw dataset + notes
-│   ├── ml-latest-small/            # MovieLens small dataset (CSV files)
-│   │   ├── links.csv
-│   │   ├── movies.csv
-│   │   ├── ratings.csv
-│   │   ├── tags.csv
-│   │   └── README.txt              # Dataset license/details (from GroupLens)
-│   └── dataset_info.txt            # Our brief dataset notes
-│
-├── database/                       # SQLite database management
-│   ├── __init__.py
-│   ├── .gitkeep
-│   ├── connection.py               # get_db() / connection helpers
-│   ├── init_db.py                  # build schema + load CSVs into movies.db
-│   ├── id_to_title.py              # for getting a title given an ID
-│   ├── load_movielens.py           # loads db into created schema
-│   └── movies.db                   # generated after running init_db.py
-│
-├── user_profile/                     # Local user profile (optional)
-│   ├── __init__.py
-│   ├── user_profile.json           # local prefs; read by CLI/recommender if needed
-│   └── user_profile_test.py        # sample structure / quick tests for profiles
-│
-├── recommender/                    # Recommendation logic
-│   ├── __init__.py
-│   ├── .gitkeep
-│   ├── baseline.py                 # very first pass recommender (e.g., popular/top-N)
-│   └── data_loader.py              # helper functions to load CSV/DB data
-│
-├── ui/                             # user interface(s)
-│   ├── __init__.py
-│   ├── CLI.py                      # cli test ui
-│   ├── web/                        # all web functions
-│       ├── static/                      # css/js
-│       │   └── style.css                   # stylesheet for web
-│       └── templates/                  # html
-│           └── index.html                  # html for test web page
-│
+```
+movie-recommender/
+├── api/                    # Flask API routes and logic
+│   ├── routes.py          # Main API endpoints
+│   ├── init_and_sync.py   # Database initialization
+│   └── sync_user_json.py  # User profile sync
+├── database/              # Database layer
+│   ├── connection.py      # DB connection management
+│   ├── db_query.py        # Query helpers
+│   ├── load_movielens.py  # MovieLens data loader
+│   └── poster_cache.py    # Poster URL management
+├── recommender/           # ML recommendation engine
+│   ├── baseline.py        # Item-item collaborative filtering
+│   └── data_loader.py     # Data loading utilities
+├── ui/web/               # Frontend
+│   ├── static/
+│   │   ├── js/           # Modular JavaScript
+│   │   │   ├── main.js            # Entry point
+│   │   │   ├── actionHandler.js   # API communication
+│   │   │   ├── eventHandlers.js   # Event delegation
+│   │   │   ├── ratingModal.js     # Star rating modal
+│   │   │   ├── movieRenderer.js   # Movie list rendering
+│   │   │   ├── ratings.js         # Add/remove rating UI
+│   │   │   ├── login.js           # Authentication
+│   │   │   └── utils.js           # Helper functions
+│   │   └── css/
+│   │       └── style.css  # Styles
+│   └── templates/
+│       └── index.html     # Main HTML template
+├── data/                  # MovieLens dataset (auto-downloaded)
+├── user_profile/          # User rating persistence
+│   └── user_profile.json
+├── .env                   # Environment variables (not in git)
 ├── .gitignore
-├── main.py                         # script to initialize and sync database
-├── app.py                          # entry point to flask application
-├── README.md
-└── requirements.txt          # project dependencies
+├── requirements.txt
+├── app.py                 # Flask application entry point
+└── README.md
 ```
 
-## TL;DR Flow (what happens when you “use it”)
+## API Endpoints
 
-```plaintext
-- Run app.py
-- app.py checks if the database exists at DB_PATH
-  - If not, it calls main.init_database_and_sync() to:
-      - initialize the database schema (database.init_db.main)
-      - load MovieLens data from CSVs (database.load_movielens.main)
-      - sync user ratings from JSON profile (database.sync_json.sync_user_ratings)
-- Flask app starts and serves endpoints:
-  - "/" or "/index" renders index.html from ui/web/templates
-- Frontend requests (via browser) access routes:
-  - Recommender reads data from the database (recommender/baseline.py + recommender/data_loader.py)
-  - Top-K movie recommendations are returned
-  - Results are rendered in HTML
+- `GET /` - Main application page
+- `POST /login` - User login
+- `POST /logout` - User logout
+- `GET /session` - Check current session
+- `POST /api/button-click` - Main API endpoint for all actions:
+  - `view_ratings_button` - Get user's ratings
+  - `get_rec_button` - Get recommendations
+  - `search` - Search movies
+  - `add_rating_submit` - Add/update rating
+  - `remove_rating` - Remove r ating
+  - `view_statistics_button` - Get rating statistics
+
+## Database Schema
+
+**movies** table:
+
+- `movie_id` (PRIMARY KEY)
+- `title`
+- `year`
+- `genres`
+- `poster_url`
+
+**ratings** table:
+
+- `user_id`
+- `movie_id`
+- `rating`
+- `timestamp`
+
+**links** table:
+
+- `movie_id`
+- `imdb_id`
+- `tmdb_id`
+
+## Recommendation Algorithm
+
+Uses **item-item collaborative filtering** with cosine similarity:
+
+1. Builds user-item rating matrix
+2. Calculates item-item similarity matrix
+3. For each user, scores unwatched movies based on similar items they've rated
+4. Returns top-K recommendations with predicted ratings
+
+## Development
+
+The frontend uses ES6 modules with no build step required. Key modules:
+
+- **main.js**: Imports all modules
+- **actionHandler.js**: Centralized API communication
+- **eventHandlers.js**: Event delegation and search autocomplete
+- **ratingModal.js**: Star rating modal functionality
+- **movieRenderer.js**: Movie list rendering with posters
+- **ratings.js**: Legacy add/remove rating form
+- **login.js**: Authentication UI
+- **utils.js**: Session helpers
+
+## Environment Variables
+
+```env
+DATABASE_URL=postgresql://user:pass@host:port/db  # Optional: uses SQLite if not set
+SECRET_KEY=your-secret-key-here                    # Required: for Flask sessions
 ```
 
-## INSTALL INFO
+## License
 
-```plaintext
-1. clone repository
-    git clone <url>
+MIT
 
-2. Install dependencies shown in 'requirements.txt'
-    pip install -r requirements.txt
+## Credits
 
-3. Run app.py
-
-4. Go to localhost:8000 to see web frontend(before we set up hosting lol)
-```
+- MovieLens dataset provided by GroupLens Research (University of Minnesota)
+- Poster images from TMDB (The Movie Database)
