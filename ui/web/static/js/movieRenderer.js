@@ -1,3 +1,9 @@
+/**
+ * movieRenderer.js
+ * Renders movie lists with posters, titles, genres, and ratings.
+ * Handles both user ratings and recommendation displays.
+ */
+
 import { showRatingModal } from "./ratingModal.js";
 
 export function renderMovies(movies, isRecs, outputDiv) {
@@ -9,7 +15,8 @@ export function renderMovies(movies, isRecs, outputDiv) {
   }
 
   movies.forEach((m) => {
-    const title = m.title ?? m.movie ?? (m.movie_id ? `ID ${m.movie_id}` : "Untitled");
+    const title =
+      m.title ?? m.movie ?? (m.movie_id ? `ID ${m.movie_id}` : "Untitled");
     const year = m.year ? ` (${m.year})` : "";
     const genres = m.genres ? m.genres : "";
     const rating = m.rating ?? null;
@@ -18,9 +25,12 @@ export function renderMovies(movies, isRecs, outputDiv) {
     const movieEl = document.createElement("div");
     movieEl.classList.add("movie");
     movieEl.style.cursor = "pointer";
+    movieEl.title = rating
+      ? "Click to update rating"
+      : "Click to rate this movie";
 
     movieEl.addEventListener("click", () => {
-      showRatingModal(m.movie_id, title);
+      showRatingModal(m.movie_id, title, rating);
     });
 
     // Add poster image

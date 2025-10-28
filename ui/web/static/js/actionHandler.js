@@ -1,3 +1,9 @@
+/**
+ * actionHandler.js
+ * Centralized handler for all button actions and API requests.
+ * Manages communication with backend and coordinates view updates.
+ */
+
 import { isLoggedIn } from "./utils.js";
 import { renderMovies } from "./movieRenderer.js";
 
@@ -39,7 +45,7 @@ export async function handleActionButton(buttonId, payload = {}) {
     }
 
     const data = await res.json();
-    
+
     const movies = Array.isArray(data) ? data : data?.ratings || [];
     const isRecs = data?.source === "recs";
 

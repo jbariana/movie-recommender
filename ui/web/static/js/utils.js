@@ -1,3 +1,9 @@
+/**
+ * utils.js
+ * Utility functions used across the application.
+ * Currently contains session management helpers.
+ */
+
 // Helper: check session on server
 export async function isLoggedIn() {
   try {

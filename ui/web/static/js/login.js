@@ -1,3 +1,9 @@
+/**
+ * login.js
+ * User authentication and session management.
+ * Handles login/logout functionality and displays current user status.
+ */
+
 // get references to important HTML elements used for login and session display
 const loginForm = document.getElementById("login_form");
 const loginInput = document.getElementById("username");

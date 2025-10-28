@@ -1,3 +1,9 @@
+/**
+ * ratingModal.js
+ * Star rating modal for adding/updating movie ratings.
+ * Creates and manages the popup modal with 5-star rating interface.
+ */
+
 // Create and manage the rating modal
 const outputDiv = document.getElementById("output");
 
@@ -28,11 +34,15 @@ let currentMovieTitle = null;
 export function showRatingModal(movieId, movieTitle) {
   currentMovieId = movieId;
   currentMovieTitle = movieTitle;
-  document.getElementById("rating-modal-title").textContent = `Rate: ${movieTitle}`;
+  document.getElementById(
+    "rating-modal-title"
+  ).textContent = `Rate: ${movieTitle}`;
   ratingModal.classList.remove("hidden");
-  
+
   // Reset stars
-  document.querySelectorAll(".star").forEach((s) => s.classList.remove("selected", "hover"));
+  document
+    .querySelectorAll(".star")
+    .forEach((s) => s.classList.remove("selected", "hover"));
 }
 
 function hideRatingModal() {
@@ -53,7 +63,9 @@ ratingModal.addEventListener("mouseover", (e) => {
 
 ratingModal.addEventListener("mouseout", (e) => {
   if (e.target.classList.contains("star")) {
-    document.querySelectorAll(".star").forEach((s) => s.classList.remove("hover"));
+    document
+      .querySelectorAll(".star")
+      .forEach((s) => s.classList.remove("hover"));
   }
 });
 
@@ -68,60 +80,64 @@ ratingModal.addEventListener("click", (e) => {
 });
 
 // Submit rating
-document.getElementById("rating-modal-submit").addEventListener("click", async () => {
-  const selectedStars = document.querySelectorAll(".star.selected");
-  if (selectedStars.length === 0) {
-    alert("Please select a rating");
-    return;
-  }
-
-  const rating = selectedStars.length;
-
-  try {
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        button: "add_rating_submit",
-        movie_id: currentMovieId,
-        rating: rating,
-      }),
-      credentials: "same-origin",
-    });
-
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { text };
-    }
-
-    if (!res.ok) {
-      outputDiv.textContent = data?.error || data?.message || `Server error (${res.status})`;
-      hideRatingModal();
+document
+  .getElementById("rating-modal-submit")
+  .addEventListener("click", async () => {
+    const selectedStars = document.querySelectorAll(".star.selected");
+    if (selectedStars.length === 0) {
+      alert("Please select a rating");
       return;
     }
 
-    if (data?.ok) {
-      outputDiv.textContent = data.message || "Rating added successfully.";
-      hideRatingModal();
-      // Refresh the current view
-      const lastButton = sessionStorage.getItem("lastButton");
-      if (lastButton) {
-        const { handleActionButton } = await import("./actionHandler.js");
-        handleActionButton(lastButton);
+    const rating = selectedStars.length;
+
+    try {
+      const res = await fetch("/api/button-click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          button: "add_rating_submit",
+          movie_id: currentMovieId,
+          rating: rating,
+        }),
+        credentials: "same-origin",
+      });
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { text };
       }
-    } else {
-      outputDiv.textContent = data?.error || data?.message || "Failed to add rating.";
+
+      if (!res.ok) {
+        outputDiv.textContent =
+          data?.error || data?.message || `Server error (${res.status})`;
+        hideRatingModal();
+        return;
+      }
+
+      if (data?.ok) {
+        outputDiv.textContent = data.message || "Rating added successfully.";
+        hideRatingModal();
+        // Refresh the current view
+        const lastButton = sessionStorage.getItem("lastButton");
+        if (lastButton) {
+          const { handleActionButton } = await import("./actionHandler.js");
+          handleActionButton(lastButton);
+        }
+      } else {
+        outputDiv.textContent =
+          data?.error || data?.message || "Failed to add rating.";
+        hideRatingModal();
+      }
+    } catch (err) {
+      outputDiv.textContent = "Error contacting backend.";
+      console.error("Network error adding rating:", err);
       hideRatingModal();
     }
-  } catch (err) {
-    outputDiv.textContent = "Error contacting backend.";
-    console.error("Network error adding rating:", err);
-    hideRatingModal();
-  }
-});
+  });
 
 // Cancel rating
 document.getElementById("rating-modal-cancel").addEventListener("click", () => {
