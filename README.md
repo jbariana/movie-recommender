@@ -62,47 +62,6 @@ On first run if DB is not initialized, the app will automatically:
 5. **View Profile**: Click "Profile" to see all your ratings
 6. **Statistics**: Click "View Statistics" for rating insights
 
-## Project Structure
-
-```
-movie-recommender/
-├── api/                    # Flask API routes and logic
-│   ├── routes.py          # Main API endpoints
-│   ├── init_and_sync.py   # Database initialization
-│   └── sync_user_json.py  # User profile sync
-├── database/              # Database layer
-│   ├── connection.py      # DB connection management
-│   ├── db_query.py        # Query helpers
-│   ├── load_movielens.py  # MovieLens data loader
-│   └── poster_cache.py    # Poster URL management
-├── recommender/           # ML recommendation engine
-│   ├── baseline.py        # Item-item collaborative filtering
-│   └── data_loader.py     # Data loading utilities
-├── ui/web/               # Frontend
-│   ├── static/
-│   │   ├── js/           # Modular JavaScript
-│   │   │   ├── main.js            # Entry point
-│   │   │   ├── actionHandler.js   # API communication
-│   │   │   ├── eventHandlers.js   # Event delegation
-│   │   │   ├── ratingModal.js     # Star rating modal
-│   │   │   ├── movieRenderer.js   # Movie list rendering
-│   │   │   ├── ratings.js         # Add/remove rating UI
-│   │   │   ├── login.js           # Authentication
-│   │   │   └── utils.js           # Helper functions
-│   │   └── css/
-│   │       └── style.css  # Styles
-│   └── templates/
-│       └── index.html     # Main HTML template
-├── data/                  # MovieLens dataset (auto-downloaded)
-├── user_profile/          # User rating persistence
-│   └── user_profile.json
-├── .env                   # Environment variables (not in git)
-├── .gitignore
-├── requirements.txt
-├── app.py                 # Flask application entry point
-└── README.md
-```
-
 ## API Endpoints
 
 - `GET /` - Main application page
