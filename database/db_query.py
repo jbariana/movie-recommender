@@ -72,17 +72,19 @@ def search_movies_by_keyword(keyword: str, limit: int = 20) -> List[Dict]:
 def upsert_rating(user_id: int, movie_id: int, rating: float) -> None:
     """
     Keep one row per (user, movie): delete previous then insert fresh with current epoch.
-    (Simple + portable across Postgres/SQLite given current schema.)
+    Portable: generate timestamp in Python, avoid DB-specific functions.
     """
+    import time
+    ts = int(time.time())
     with get_db(readonly=False) as conn:
         cur = conn.cursor()
         cur.execute(f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};", (user_id, movie_id))
         cur.execute(
             f"""
             INSERT INTO ratings (user_id, movie_id, rating, timestamp)
-            VALUES ({PH}, {PH}, {PH}, CAST(EXTRACT(EPOCH FROM NOW()) AS BIGINT))
+            VALUES ({PH}, {PH}, {PH}, {PH})
             """,
-            (user_id, movie_id, rating),
+            (user_id, movie_id, rating, ts),
         )
         
 def top_unseen_for_user(user_id: int, limit: int = 20, min_votes: int = 50, m_param: int = 50) -> List[Dict]:
@@ -142,4 +144,4 @@ def top_unseen_for_user(user_id: int, limit: int = 20, min_votes: int = 50, m_pa
             "weighted_rating": float(wr),
         }
         for (mid, title, year, votes, avg, wr) in rows
-    ]      
+    ]

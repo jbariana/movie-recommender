@@ -24,31 +24,32 @@ def fit_item_item():
     return sim, movie_ids
 
 def recommend_for_user(user_id: int, k: int = 10) -> List[Tuple[int, float]]:
-    """
-    Returns a list of (movie_id, score) for the given user.
-    Simple score = sum(similarity to items the user rated) * rating.
-    """
     ui = load_user_item_matrix()
     if user_id not in ui.index:
         return []
     sim, movie_ids = fit_item_item()
+    num_movies = sim.shape[0]
+    if num_movies == 0:
+        return []
+    k = min(k, num_movies)
 
-    user_ratings = ui.loc[user_id]           # Series of ratings indexed by movie_id
+    user_ratings = ui.loc[user_id]
     rated = user_ratings.dropna()
     if rated.empty:
         return []
 
-    # map rated movie ids to indices in sim matrix
     id_to_idx = {mid: i for i, mid in enumerate(movie_ids)}
-    rated_idx = np.array([id_to_idx[m] for m in rated.index], dtype=int)
+    rated_idx = np.array([id_to_idx[m] for m in rated.index if m in id_to_idx], dtype=int)
+    if rated_idx.size == 0:
+        return []
 
-    # score all movies by similarity to rated ones, weighted by rating
-    weights = rated.values
-    scores = (sim[:, rated_idx] @ weights)   # shape: (num_movies,)
-    # do not recommend already-rated
-    scores[rated_idx] = -np.inf
+    weights = rated.values[: rated_idx.size]
+    scores = (sim[:, rated_idx] @ weights)
 
-    # top-k
+    # mask already-rated
+    for ri in rated_idx:
+        scores[ri] = -np.inf
+
     top_idx = np.argpartition(scores, -k)[-k:]
     top_idx = top_idx[np.argsort(scores[top_idx])[::-1]]
     recs = [(int(movie_ids[i]), float(scores[i])) for i in top_idx if np.isfinite(scores[i])]

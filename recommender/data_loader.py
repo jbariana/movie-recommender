@@ -13,6 +13,8 @@ Examples:
 from __future__ import annotations
 from typing import Generator, Iterable, Tuple
 import pandas as pd
+import os
+from sqlalchemy import create_engine
 from database.paramstyle import PH, ph_list
 
 # Reuse the same DB helper
@@ -85,3 +87,17 @@ def get_movie_titles(movie_ids: Iterable[int]) -> dict[int, str]:
         cur.execute(q, ids)
         rows = cur.fetchall()
     return {int(mid): title for (mid, title) in rows}
+
+def _sa_engine_for_loader():
+    from database.load_movielens import _engine as _lm_engine  # reuse existing helper
+    return _lm_engine()
+
+def load_ratings_data():
+    """Load ratings data using SQLAlchemy engine for pandas compatibility."""
+    engine = _sa_engine_for_loader()
+    return pd.read_sql_query("SELECT * FROM ratings", engine)
+
+def load_movies_data():
+    """Load movies data using SQLAlchemy engine for pandas compatibility."""
+    engine = _sa_engine_for_loader()
+    return pd.read_sql_query("SELECT * FROM movies", engine)
