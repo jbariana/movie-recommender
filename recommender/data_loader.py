@@ -11,10 +11,9 @@ Examples:
 """
 
 from __future__ import annotations
-import sqlite3
 from typing import Generator, Iterable, Tuple
 import pandas as pd
-from pathlib import Path
+from database.paramstyle import PH, ph_list
 
 # Reuse the same DB helper
 from database.connection import get_db
@@ -33,17 +32,16 @@ def load_ratings_df(min_ratings_per_user: int | None = None) -> pd.DataFrame:
     with get_db(readonly=True) as conn:
         if min_ratings_per_user is None:
             return pd.read_sql_query("SELECT * FROM ratings", conn)
-        q = """
+        q = f"""
             WITH cnt AS (
               SELECT user_id, COUNT(*) AS n FROM ratings GROUP BY user_id
             )
             SELECT r.*
             FROM ratings r
             JOIN cnt ON cnt.user_id = r.user_id
-            WHERE cnt.n >= ?
+            WHERE cnt.n >= {PH}
         """
         return pd.read_sql_query(q, conn, params=(min_ratings_per_user,))
-
 def load_user_item_matrix() -> pd.DataFrame:
     """
     Returns a pivoted user-item matrix (users as rows, movies as columns).
@@ -60,8 +58,14 @@ def iter_user_ratings(user_ids: Iterable[int] | None = None) -> Generator[Tuple[
     with get_db(readonly=True) as conn:
         cur = conn.cursor()
         if user_ids:
-            q = f"SELECT user_id, movie_id, rating, timestamp FROM ratings WHERE user_id IN ({','.join('?'*len(list(user_ids)))}) ORDER BY user_id"
-            cur.execute(q, list(user_ids))
+            ids = list(user_ids)
+            q = f"""
+                SELECT user_id, movie_id, rating, timestamp
+                FROM ratings
+                WHERE user_id IN ({ph_list(len(ids))})
+                ORDER BY user_id
+            """
+            cur.execute(q, ids)
         else:
             cur.execute("SELECT user_id, movie_id, rating, timestamp FROM ratings ORDER BY user_id")
         for row in cur:
@@ -74,8 +78,10 @@ def get_movie_titles(movie_ids: Iterable[int]) -> dict[int, str]:
     ids = list(movie_ids)
     if not ids:
         return {}
-    placeholders = ",".join("?" * len(ids))
+    placeholders = ph_list(len(ids))
     q = f"SELECT movie_id, title FROM movies WHERE movie_id IN ({placeholders})"
     with get_db(readonly=True) as conn:
-        rows = conn.execute(q, ids).fetchall()
+        cur = conn.cursor()
+        cur.execute(q, ids)
+        rows = cur.fetchall()
     return {int(mid): title for (mid, title) in rows}
