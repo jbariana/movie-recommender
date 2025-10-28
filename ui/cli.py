@@ -158,3 +158,21 @@ Recommend:
             continue
 
         print("Unknown command. Type 'help' for a list of commands.")
+
+from api.movies import save_rating
+
+def rate_movie(movie_id):
+    rating = input("Rate this movie (1-5): ")
+
+    # Basic validation
+    try:
+        rating = int(rating)
+        if rating < 1 or rating > 5:
+            print("Rating must be between 1 and 5.")
+            return
+    except ValueError:
+        print("Invalid number.")
+        return
+
+    save_rating(user_id=1, movie_id=movie_id, rating=rating)
+    print("✅ Rating saved!\n")

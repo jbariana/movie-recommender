@@ -102,65 +102,15 @@ def button_click():
         logger.exception("Error in handle_button_click")
         return jsonify({"error": str(ex)}), 500
 
+from database.connection import get_db
 
-# ---------- Data APIs ----------
-@api_bp.get("/api/search")
-def api_search_movies():
-    q = (request.args.get("q") or "").strip()
-    try:
-        limit = int(request.args.get("limit", 20))
-    except ValueError:
-        return jsonify({"error": "invalid limit"}), 400
-    if not q:
-        return jsonify({"error": "missing q"}), 400
-    items = search_movies_by_keyword(q, limit)
-    return jsonify({"items": items})
-
-
-@api_bp.get("/api/ratings")
-def api_get_ratings():
-    try:
-        user_id = int(request.args.get("user_id"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "missing/invalid user_id"}), 400
-    items = get_ratings_for_user(user_id)
-    return jsonify({"items": items})
-
-
-@api_bp.post("/api/rate")
-def api_rate_movie():
-    data = request.get_json(force=True) or {}
-    try:
-        user_id = int(data["user_id"])
-        movie_id = int(data["movie_id"])
-        rating = float(data["rating"])
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "user_id, movie_id, rating required"}), 400
-
-    if not (0.5 <= rating <= 5.0):
-        return jsonify({"error": "rating out of range [0.5, 5.0]"}), 400
-
-    try:
-        upsert_rating(user_id, movie_id, rating)
-        return jsonify({"ok": True, "user_id": user_id, "movie_id": movie_id, "rating": rating})
-    except Exception as ex:
-        logger.exception("rate failed")
-        return jsonify({"error": f"database error: {ex}"}), 500
-    
-
-@api_bp.get("/api/recommendations")
-def api_recommendations():
-    # query params: user_id (required), limit, min_votes
-    try:
-        user_id = int(request.args.get("user_id"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "missing/invalid user_id"}), 400
-
-    try:
-        limit = int(request.args.get("limit", 20))
-        min_votes = int(request.args.get("min_votes", 50))
-    except ValueError:
-        return jsonify({"error": "invalid numeric param"}), 400
-
-    items = top_unseen_for_user(user_id=user_id, limit=limit, min_votes=min_votes, m_param=50)
-    return jsonify({"items": items})
+def save_rating(user_id, movie_id, rating):
+    """
+    Save a user's rating for a movie into the database.
+    """
+    db = get_db()
+    db.execute(
+        "INSERT INTO user_ratings (user_id, movie_id, rating) VALUES (?, ?, ?)",
+        (user_id, movie_id, rating)
+    )
+    db.commit()
