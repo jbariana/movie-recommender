@@ -7,6 +7,21 @@
       "title": "Mortal Kombat (1995)",
       "rating": 1.0,
       "timestamp": 1761621068
+    },
+    {
+      "movie_id": 79702,
+      "rating": 2.0,
+      "timestamp": 1761624611
+    },
+    {
+      "movie_id": 26819,
+      "rating": 4.0,
+      "timestamp": 1761624761
+    },
+    {
+      "movie_id": 8382,
+      "rating": 2.0,
+      "timestamp": 1761624988
     }
   ]
 }

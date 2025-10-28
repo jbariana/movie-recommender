@@ -57,5 +57,32 @@ def recommend_for_user(user_id: int, k: int = 10) -> List[Tuple[int, float]]:
 
 def recommend_titles_for_user(user_id: int, k: int = 10):
     recs = recommend_for_user(user_id, k)
-    titles = get_movie_titles([mid for mid, _ in recs])
-    return [(titles[mid], score) for mid, score in recs]
+    
+    from database.connection import get_db
+    from database.paramstyle import PH, ph_list
+    
+    movie_ids = [mid for mid, _ in recs]
+    if not movie_ids:
+        return []
+    
+    with get_db(readonly=True) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT movie_id, title, poster_url FROM movies WHERE movie_id IN ({ph_list(len(movie_ids))})",
+            movie_ids
+        )
+        rows = cur.fetchall()
+    
+    title_map = {int(mid): {"title": title, "poster_url": poster} for mid, title, poster in rows}
+    
+    results = []
+    for mid, score in recs:
+        info = title_map.get(mid, {"title": f"ID {mid}", "poster_url": None})
+        results.append({
+            "movie_id": mid,
+            "title": info["title"],
+            "rating": score,
+            "poster_url": info["poster_url"]
+        })
+    
+    return results

@@ -9,7 +9,7 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
         cur = conn.cursor()
         cur.execute(
             f"""
-            SELECT r.movie_id, m.title, m.year, r.rating, r.timestamp
+            SELECT r.movie_id, m.title, m.year, r.rating, r.timestamp, m.poster_url
             FROM ratings r
             LEFT JOIN movies m ON r.movie_id = m.movie_id
             WHERE r.user_id = {PH}
@@ -20,7 +20,7 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
         rows = cur.fetchall()
 
     results: List[Dict] = []
-    for movie_id, title_db, year, rating, ts in rows:
+    for movie_id, title_db, year, rating, ts, poster_url in rows:
         # prefer your in-memory map, fallback to "Title (Year)" if present
         title = id_to_title(movie_id) or (f"{title_db} ({year})" if title_db and year else title_db)
         results.append(
@@ -29,6 +29,7 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
                 "title": title if title is not None else None,
                 "rating": float(rating),
                 "timestamp": int(ts),
+                "poster_url": poster_url,
             }
         )
     return results
@@ -44,7 +45,7 @@ def search_movies_by_keyword(keyword: str, limit: int = 20) -> List[Dict]:
         cur = conn.cursor()
         cur.execute(
             f"""
-            SELECT movie_id, title, year, genres
+            SELECT movie_id, title, year, genres, poster_url
             FROM movies
             WHERE LOWER(title) LIKE {PH}
             ORDER BY title ASC
@@ -55,13 +56,14 @@ def search_movies_by_keyword(keyword: str, limit: int = 20) -> List[Dict]:
         rows = cur.fetchall()
 
     results: List[Dict] = []
-    for movie_id, title, year, genres in rows:
+    for movie_id, title, year, genres, poster_url in rows:
         results.append(
             {
                 "movie_id": int(movie_id),
                 "title": title,
                 "year": int(year) if year is not None else None,
                 "genres": genres,
+                "poster_url": poster_url,
             }
         )
     return results
