@@ -41,9 +41,9 @@ python app.py
 
 ## First Time Setup
 
-Create a .env file in the root directory with:
-DATABASE_URL=your_postgres_url
-SECRET_KEY=your_secret_key_here
+Create a .env file in the root directory with: \
+DATABASE_URL=your_postgres_url \
+SECRET_KEY=your_secret_key_here 
 
 ## License
 
