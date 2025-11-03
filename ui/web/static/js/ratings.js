@@ -1,87 +1,79 @@
 /**
  * ratings.js
- * Legacy "Add Rating" box with autocomplete search.
- * Provides an alternative way to add ratings via a dropdown form.
- * Also handles the "Remove Rating" button functionality.
+ * legacy "Add Rating" box with autocomplete search
+ * also handles "Remove Rating" button
  */
 
 const outputDiv = document.getElementById("output");
-
-//dynamically builds the input UI for adding a new movie rating
 const addBtn = document.getElementById("add_rating_button");
 const addBox = document.getElementById("add-rating-box");
-
-//create and configure input fields + buttons programmatically
-const autocompleteContainer = document.createElement("div");
-autocompleteContainer.className = "autocomplete-container";
-
-const addInputTitle = document.createElement("input");
-const autocompleteDropdown = document.createElement("div");
-const addInputRating = document.createElement("input");
-const addSubmit = document.createElement("button");
-const addCancel = document.createElement("button");
-
-addInputTitle.type = "text";
-addInputTitle.placeholder = "Search movie title...";
-addInputTitle.id = "add_rating_input_title";
-
-autocompleteDropdown.className = "autocomplete-dropdown";
-autocompleteDropdown.id = "autocomplete-dropdown";
-
-addInputRating.type = "number";
-addInputRating.placeholder = "Rating (1–5)";
-addInputRating.min = "1";
-addInputRating.max = "5";
-addInputRating.step = "0.5";
-addInputRating.id = "add_rating_input_rating";
-
-addSubmit.textContent = "Submit";
-addSubmit.id = "add_rating_submit";
-addSubmit.disabled = true;
-
-addCancel.textContent = "Cancel";
-addCancel.id = "add_rating_cancel";
-
-autocompleteContainer.appendChild(addInputTitle);
-autocompleteContainer.appendChild(autocompleteDropdown);
-
-//inject the form elements into the add rating box container
-if (addBox) {
-  addBox.innerHTML = "";
-  addBox.append(autocompleteContainer, addInputRating, addSubmit, addCancel);
-}
 
 let selectedMovieId = null;
 let autocompleteTimeout = null;
 
-//utility functions to toggle the visibility of the add rating box
-function hideAddBox() {
-  if (!addBox) return;
-  addBox.classList.remove("visible");
-  addBox.setAttribute("aria-hidden", "true");
+//helper to show status messages
+function showMessage(text, isError = false) {
+  const msg = document.createElement("div");
+  msg.className = "success-message";
+  if (isError) msg.style.background = "#e74c3c";
+  msg.textContent = text;
+  outputDiv.insertBefore(msg, outputDiv.firstChild);
+  setTimeout(() => msg.remove(), 3000);
+}
+
+//helper to refresh current view
+async function refreshView() {
+  const lastButton = sessionStorage.getItem("lastButton");
+  if (lastButton) {
+    const module = await import("./actionHandler.js");
+    module.handleActionButton(lastButton);
+  }
+}
+
+//build add rating form if container exists
+if (addBox) {
+  addBox.innerHTML = `
+    <div class="autocomplete-container">
+      <input type="text" placeholder="Search movie title..." id="add_rating_input_title">
+      <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
+    </div>
+    <input type="number" placeholder="Rating (1–5)" min="1" max="5" step="0.5" id="add_rating_input_rating">
+    <button id="add_rating_submit" disabled>Submit</button>
+    <button id="add_rating_cancel">Cancel</button>
+  `;
+}
+
+const addInputTitle = document.getElementById("add_rating_input_title");
+const addInputRating = document.getElementById("add_rating_input_rating");
+const addSubmit = document.getElementById("add_rating_submit");
+const addCancel = document.getElementById("add_rating_cancel");
+const autocompleteDropdown = document.getElementById("autocomplete-dropdown");
+
+//toggle add box
+addBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  addBox?.classList.toggle("visible");
+  if (addBox?.classList.contains("visible")) {
+    addInputTitle?.focus();
+  }
+});
+
+//close add box
+addCancel?.addEventListener("click", () => {
+  addBox?.classList.remove("visible");
   addInputTitle.value = "";
   addInputRating.value = "";
-  autocompleteDropdown.classList.remove("visible");
   autocompleteDropdown.innerHTML = "";
   selectedMovieId = null;
   addSubmit.disabled = true;
-}
+});
 
-function showAddBox() {
-  if (!addBox) return;
-  addBox.classList.add("visible");
-  addBox.setAttribute("aria-hidden", "false");
-  addInputTitle.focus();
-}
-
-// Autocomplete functionality
-addInputTitle.addEventListener("input", async (e) => {
+//autocomplete search
+addInputTitle?.addEventListener("input", async (e) => {
   const query = e.target.value.trim();
-
   clearTimeout(autocompleteTimeout);
 
   if (query.length < 2) {
-    autocompleteDropdown.classList.remove("visible");
     autocompleteDropdown.innerHTML = "";
     selectedMovieId = null;
     addSubmit.disabled = true;
@@ -93,215 +85,120 @@ addInputTitle.addEventListener("input", async (e) => {
       const res = await fetch("/api/button-click", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          button: "search",
-          query: query,
-        }),
+        body: JSON.stringify({ button: "search", query }),
         credentials: "same-origin",
       });
 
-      if (!res.ok) return;
-
       const data = await res.json();
-      const movies = Array.isArray(data) ? data : data?.ratings || [];
+      const movies = data?.ratings || [];
 
-      if (movies.length === 0) {
+      if (!movies.length) {
         autocompleteDropdown.innerHTML =
-          "<div class='autocomplete-item'>No results found</div>";
-        autocompleteDropdown.classList.add("visible");
+          "<div class='autocomplete-item'>No results</div>";
         return;
       }
 
-      autocompleteDropdown.innerHTML = "";
-      movies.slice(0, 10).forEach((movie) => {
-        const item = document.createElement("div");
-        item.className = "autocomplete-item";
-        item.dataset.movieId = movie.movie_id;
+      autocompleteDropdown.innerHTML = movies
+        .slice(0, 10)
+        .map(
+          (m) => `
+        <div class="autocomplete-item" data-movie-id="${m.movie_id}">
+          <div class="autocomplete-item-title">${m.title}</div>
+          <div class="autocomplete-item-meta">${m.year || ""}${
+            m.genres ? ` • ${m.genres}` : ""
+          }</div>
+        </div>
+      `
+        )
+        .join("");
 
-        const title = document.createElement("div");
-        title.className = "autocomplete-item-title";
-        title.textContent = movie.title;
-
-        const meta = document.createElement("div");
-        meta.className = "autocomplete-item-meta";
-        const yearStr = movie.year ? `${movie.year}` : "";
-        const genresStr = movie.genres ? ` • ${movie.genres}` : "";
-        meta.textContent = `${yearStr}${genresStr}`;
-
-        item.appendChild(title);
-        item.appendChild(meta);
-
-        item.addEventListener("click", () => {
-          selectedMovieId = movie.movie_id;
-          addInputTitle.value = movie.title;
-          autocompleteDropdown.classList.remove("visible");
-          addInputRating.focus();
-          addSubmit.disabled = false;
+      //handle clicks on suggestions
+      autocompleteDropdown
+        .querySelectorAll(".autocomplete-item")
+        .forEach((item) => {
+          item.addEventListener("click", () => {
+            selectedMovieId = item.dataset.movieId;
+            addInputTitle.value = item.querySelector(
+              ".autocomplete-item-title"
+            ).textContent;
+            autocompleteDropdown.innerHTML = "";
+            addInputRating.focus();
+            addSubmit.disabled = false;
+          });
         });
-
-        autocompleteDropdown.appendChild(item);
-      });
-
-      autocompleteDropdown.classList.add("visible");
     } catch (err) {
       console.error("Autocomplete error:", err);
     }
   }, 300);
 });
 
-// Close dropdown when clicking outside
+//close dropdown on outside click
 document.addEventListener("click", (e) => {
-  if (!autocompleteContainer.contains(e.target)) {
-    autocompleteDropdown.classList.remove("visible");
+  if (!e.target.closest(".autocomplete-container")) {
+    autocompleteDropdown.innerHTML = "";
   }
 });
 
-//clicking the main "Add Rating" button toggles the add box visibility
-if (addBtn) {
-  addBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    addBox &&
-      (addBox.classList.contains("visible") ? hideAddBox() : showAddBox());
-  });
-}
+//submit rating
+addSubmit?.addEventListener("click", async () => {
+  if (!selectedMovieId || !addInputRating.value.trim()) {
+    showMessage("Please select a movie and enter a rating.", true);
+    return;
+  }
 
-//"Cancel" button closes the box and clears inputs
-if (addCancel) {
-  addCancel.addEventListener("click", (e) => {
-    e.preventDefault();
-    hideAddBox();
-  });
-}
+  addSubmit.disabled = true;
+  addSubmit.textContent = "Adding...";
 
-//handle "Submit" click — sends rating data to backend
-if (addSubmit) {
-  addSubmit.addEventListener("click", async (e) => {
-    e.preventDefault();
+  try {
+    const res = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        button: "add_rating_submit",
+        movie_id: selectedMovieId,
+        rating: addInputRating.value.trim(),
+      }),
+      credentials: "same-origin",
+    });
 
-    if (!selectedMovieId || !addInputRating.value.trim()) {
-      const msg = document.createElement("div");
-      msg.className = "success-message";
-      msg.style.background = "#e74c3c";
-      msg.textContent = "Please select a movie and enter a rating.";
-      outputDiv.insertBefore(msg, outputDiv.firstChild);
-      setTimeout(() => msg.remove(), 3000);
-      return;
+    const data = await res.json();
+
+    if (data?.ok) {
+      showMessage(data.message || "Rating added.");
+      addBox?.classList.remove("visible");
+      await refreshView();
+    } else {
+      showMessage(data?.error || "Failed to add rating.", true);
     }
+  } catch (err) {
+    showMessage("Error contacting backend.", true);
+  } finally {
+    addSubmit.disabled = false;
+    addSubmit.textContent = "Submit";
+  }
+});
 
-    const rating = addInputRating.value.trim();
-
-    addSubmit.disabled = true;
-    addSubmit.textContent = "Adding...";
-
-    try {
-      const res = await fetch("/api/button-click", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          button: "add_rating_submit",
-          movie_id: selectedMovieId,
-          rating: rating,
-        }),
-        credentials: "same-origin",
-      });
-
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { text };
-      }
-
-      if (!res.ok) {
-        console.error("Add rating failed", res.status, text);
-        const msg = document.createElement("div");
-        msg.className = "success-message";
-        msg.style.background = "#e74c3c";
-        msg.textContent =
-          data?.error || data?.message || `Server error (${res.status})`;
-        outputDiv.insertBefore(msg, outputDiv.firstChild);
-        setTimeout(() => msg.remove(), 3000);
-        return;
-      }
-
-      if (data?.ok) {
-        const msg = document.createElement("div");
-        msg.className = "success-message";
-        msg.textContent = data.message || "Rating added successfully.";
-        outputDiv.insertBefore(msg, outputDiv.firstChild);
-        setTimeout(() => msg.remove(), 3000);
-        hideAddBox();
-
-        // Refresh current view
-        const lastButton = sessionStorage.getItem("lastButton");
-        if (lastButton) {
-          const module = await import("./actionHandler.js");
-          module.handleActionButton(lastButton);
-        }
-      } else {
-        console.warn("Backend returned non-ok payload for add:", data);
-        const msg = document.createElement("div");
-        msg.className = "success-message";
-        msg.style.background = "#e74c3c";
-        msg.textContent =
-          data?.error || data?.message || "Failed to add rating.";
-        outputDiv.insertBefore(msg, outputDiv.firstChild);
-        setTimeout(() => msg.remove(), 3000);
-      }
-    } catch (err) {
-      const msg = document.createElement("div");
-      msg.className = "success-message";
-      msg.style.background = "#e74c3c";
-      msg.textContent = "Error contacting backend.";
-      outputDiv.insertBefore(msg, outputDiv.firstChild);
-      setTimeout(() => msg.remove(), 3000);
-      console.error("Network error adding rating:", err);
-    } finally {
-      addSubmit.disabled = false;
-      addSubmit.textContent = "Submit";
-    }
-  });
-}
-
-//simple prompt-based workflow to remove an existing rating
-const removeBtn = document.getElementById("remove_rating_button");
-if (removeBtn) {
-  removeBtn.addEventListener("click", async () => {
-    const movieId = prompt("Enter Movie ID to remove rating:");
+//remove rating
+document
+  .getElementById("remove_rating_button")
+  ?.addEventListener("click", async () => {
+    const movieId = prompt("Enter Movie ID to remove:");
     if (!movieId) return;
 
-    const msg = document.createElement("div");
-    msg.className = "success-message";
-    msg.textContent = "Removing rating...";
-    outputDiv.insertBefore(msg, outputDiv.firstChild);
+    showMessage("Removing...");
 
     try {
       const res = await fetch("/api/button-click", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          button: "remove_rating",
-          movie_id: movieId,
-        }),
+        body: JSON.stringify({ button: "remove_rating", movie_id: movieId }),
         credentials: "same-origin",
       });
 
       const data = await res.json();
-      msg.textContent = data?.message || data?.error || "Done.";
-      setTimeout(() => msg.remove(), 3000);
-
-      // Refresh current view
-      const lastButton = sessionStorage.getItem("lastButton");
-      if (lastButton) {
-        const module = await import("./actionHandler.js");
-        module.handleActionButton(lastButton);
-      }
+      showMessage(data?.message || "Done.");
+      await refreshView();
     } catch (err) {
-      msg.textContent = "Error contacting backend.";
-      msg.style.background = "#e74c3c";
-      setTimeout(() => msg.remove(), 3000);
-      console.error(err);
+      showMessage("Error contacting backend.", true);
     }
   });
-}

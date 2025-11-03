@@ -1,7 +1,6 @@
 /**
  * search.js
- * Unified search functionality for autocomplete and full results
- * Used on both home and browse pages
+ * unified search with autocomplete and full results display
  */
 
 import { showRatingModal } from "./ratingModal.js";
@@ -10,9 +9,7 @@ import { renderMovieTiles } from "./shared.js";
 let searchAutocompleteTimeout = null;
 let searchDropdown = null;
 
-/**
- * Create search dropdown for autocomplete
- */
+//create or return existing search dropdown
 function createSearchDropdown(searchInput) {
   if (searchDropdown) return searchDropdown;
 
@@ -29,9 +26,7 @@ function createSearchDropdown(searchInput) {
   return searchDropdown;
 }
 
-/**
- * Initialize search autocomplete
- */
+//setup autocomplete dropdown on search input
 export function initSearchAutocomplete(searchInput) {
   if (!searchInput) return;
 
@@ -39,7 +34,6 @@ export function initSearchAutocomplete(searchInput) {
 
   searchInput.addEventListener("input", async (e) => {
     const query = e.target.value.trim();
-
     clearTimeout(searchAutocompleteTimeout);
 
     if (query.length < 2) {
@@ -48,56 +42,54 @@ export function initSearchAutocomplete(searchInput) {
       return;
     }
 
+    //debounce 300ms
     searchAutocompleteTimeout = setTimeout(async () => {
       try {
         const res = await fetch("/api/button-click", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            button: "search",
-            query: query,
-          }),
+          body: JSON.stringify({ button: "search", query }),
           credentials: "same-origin",
         });
 
         if (!res.ok) return;
 
         const data = await res.json();
-        const movies = Array.isArray(data) ? data : data?.ratings || [];
+        const movies = data?.ratings || [];
 
-        if (movies.length === 0) {
+        if (!movies.length) {
           dropdown.innerHTML =
             "<div class='autocomplete-item'>No results found</div>";
           dropdown.classList.add("visible");
           return;
         }
 
-        dropdown.innerHTML = "";
-        movies.slice(0, 10).forEach((movie) => {
-          const item = document.createElement("div");
-          item.className = "autocomplete-item";
-          item.dataset.movieId = movie.movie_id;
+        //render autocomplete suggestions
+        dropdown.innerHTML = movies
+          .slice(0, 10)
+          .map(
+            (m) => `
+          <div class="autocomplete-item" data-movie-id="${m.movie_id}">
+            <div class="autocomplete-item-title">${m.title}</div>
+            <div class="autocomplete-item-meta">${m.year || ""}${
+              m.genres ? ` • ${m.genres}` : ""
+            }</div>
+          </div>
+        `
+          )
+          .join("");
 
-          const title = document.createElement("div");
-          title.className = "autocomplete-item-title";
-          title.textContent = movie.title;
-
-          const meta = document.createElement("div");
-          meta.className = "autocomplete-item-meta";
-          const yearStr = movie.year ? `${movie.year}` : "";
-          const genresStr = movie.genres ? ` • ${movie.genres}` : "";
-          meta.textContent = `${yearStr}${genresStr}`;
-
-          item.appendChild(title);
-          item.appendChild(meta);
-
+        //handle clicks on suggestions
+        dropdown.querySelectorAll(".autocomplete-item").forEach((item) => {
           item.addEventListener("click", () => {
+            const movieId = item.dataset.movieId;
+            const title = item.querySelector(
+              ".autocomplete-item-title"
+            ).textContent;
             dropdown.classList.remove("visible");
-            searchInput.value = movie.title;
-            showRatingModal(movie.movie_id, movie.title, movie.rating);
+            searchInput.value = title;
+            showRatingModal(movieId, title);
           });
-
-          dropdown.appendChild(item);
         });
 
         dropdown.classList.add("visible");
@@ -108,13 +100,11 @@ export function initSearchAutocomplete(searchInput) {
   });
 }
 
-/**
- * Execute full search and display results in grid format
- */
+//execute full search and display results in grid
 export async function executeSearch(query, outputDiv) {
   if (!query || !outputDiv) return;
 
-  // Close autocomplete dropdown if open
+  //close autocomplete dropdown
   if (searchDropdown) {
     searchDropdown.classList.remove("visible");
   }
@@ -132,7 +122,7 @@ export async function executeSearch(query, outputDiv) {
     const data = await res.json();
     const movies = data?.ratings || [];
 
-    if (movies.length === 0) {
+    if (!movies.length) {
       outputDiv.innerHTML = '<div class="info-message">No results found.</div>';
     } else {
       const grid = renderMovieTiles(movies);
@@ -145,9 +135,7 @@ export async function executeSearch(query, outputDiv) {
   }
 }
 
-/**
- * Setup search button and Enter key handlers
- */
+//setup search button and enter key handlers
 export function initSearchHandlers(searchInput, searchButton, outputDiv) {
   if (!searchInput || !searchButton || !outputDiv) return;
 
@@ -160,13 +148,11 @@ export function initSearchHandlers(searchInput, searchButton, outputDiv) {
     executeSearch(query, outputDiv);
   };
 
-  // Search button click
   searchButton.addEventListener("click", (e) => {
     e.preventDefault();
     handleSearch();
   });
 
-  // Enter key in search input
   searchInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -175,9 +161,7 @@ export function initSearchHandlers(searchInput, searchButton, outputDiv) {
   });
 }
 
-/**
- * Close dropdown when clicking outside
- */
+//close dropdown when clicking outside
 export function initSearchClickOutside(searchInput) {
   document.addEventListener("click", (e) => {
     if (
@@ -190,9 +174,7 @@ export function initSearchClickOutside(searchInput) {
   });
 }
 
-/**
- * Initialize all search functionality
- */
+//initialize all search functionality
 export function initSearch(searchInput, searchButton, outputDiv) {
   initSearchAutocomplete(searchInput);
   initSearchHandlers(searchInput, searchButton, outputDiv);

@@ -1,21 +1,19 @@
 /**
  * shared.js
- * Shared utilities for login, navigation, and search across pages.
- * Reduces code duplication between index and browse pages.
+ * shared utilities for login, navigation, and search across pages
  */
 
 import { showRatingModal } from "./ratingModal.js";
 
-// Logged out HTML template
 let LOGGED_OUT_HTML = "";
 
+//store original login form HTML
 export function initLoginUI() {
   const loginForm = document.getElementById("login_form");
-  if (loginForm) {
-    LOGGED_OUT_HTML = loginForm.innerHTML;
-  }
+  if (loginForm) LOGGED_OUT_HTML = loginForm.innerHTML;
 }
 
+//render logged in state with username and logout button
 export function renderLoggedIn(username) {
   const loginForm = document.getElementById("login_form");
   if (!loginForm) return;
@@ -34,6 +32,7 @@ export function renderLoggedIn(username) {
     });
 }
 
+//render logged out state with login form
 export function renderLoggedOut() {
   const loginForm = document.getElementById("login_form");
   if (!loginForm) return;
@@ -57,13 +56,13 @@ export function renderLoggedOut() {
 
       if (res.ok) {
         renderLoggedIn(username);
-        // Trigger custom event for pages to handle post-login
         window.dispatchEvent(new CustomEvent("userLoggedIn"));
       }
     };
   }
 }
 
+//check if user is logged in
 export async function checkSession() {
   try {
     const res = await fetch("/session", { credentials: "same-origin" });
@@ -77,6 +76,7 @@ export async function checkSession() {
   return null;
 }
 
+//setup navigation handlers
 export function setupNavigation() {
   document.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button, a");
@@ -94,9 +94,7 @@ export function setupNavigation() {
   });
 }
 
-/**
- * Render movie tiles grid (shared grid format for all pages)
- */
+//render movies in tile grid format
 export function renderMovieTiles(movies) {
   const grid = document.createElement("div");
   grid.className = "movie-grid";
@@ -106,7 +104,7 @@ export function renderMovieTiles(movies) {
     tile.className = "movie-tile";
     tile.dataset.movieId = movie.movie_id;
 
-    // Poster: image if available, else placeholder
+    //add poster or placeholder
     let posterEl;
     if (movie.poster_url) {
       posterEl = document.createElement("img");
@@ -127,27 +125,28 @@ export function renderMovieTiles(movies) {
       posterEl.textContent = "No Poster";
     }
 
+    //add title
     const title = document.createElement("div");
     title.className = "movie-tile-title";
     title.textContent = movie.title;
 
+    //add metadata (year and genres)
     const meta = document.createElement("div");
     meta.className = "movie-tile-meta";
-    const yearStr = movie.year ? `${movie.year}` : "";
-    const genresStr = movie.genres ? ` • ${movie.genres}` : "";
-    meta.textContent = `${yearStr}${genresStr}`;
+    meta.textContent = `${movie.year || ""}${
+      movie.genres ? ` • ${movie.genres}` : ""
+    }`;
 
+    //add rating display
     const rating = document.createElement("div");
     rating.className = "movie-tile-rating";
     rating.textContent = movie.rating
       ? `★ ${Number(movie.rating).toFixed(1)}`
       : "Unrated";
 
-    tile.appendChild(posterEl);
-    tile.appendChild(title);
-    tile.appendChild(meta);
-    tile.appendChild(rating);
+    tile.append(posterEl, title, meta, rating);
 
+    //open rating modal on click
     tile.addEventListener("click", () => {
       showRatingModal(movie.movie_id, movie.title, movie.rating);
     });
@@ -158,6 +157,7 @@ export function renderMovieTiles(movies) {
   return grid;
 }
 
+//setup search handlers
 export function setupSearch(onSearch) {
   const searchInput = document.getElementById("search_input");
   const searchButton = document.getElementById("search_button");
@@ -166,9 +166,7 @@ export function setupSearch(onSearch) {
 
   const handleSearch = () => {
     const query = searchInput.value.trim();
-    if (query && onSearch) {
-      onSearch(query);
-    }
+    if (query && onSearch) onSearch(query);
   };
 
   searchButton.addEventListener("click", (e) => {
