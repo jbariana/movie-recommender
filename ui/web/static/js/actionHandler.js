@@ -5,7 +5,7 @@
  */
 
 import { isLoggedIn } from "./utils.js";
-import { renderMovies } from "./movieRenderer.js";
+import { renderMovieTiles } from "./shared.js";
 
 const outputDiv = document.getElementById("output");
 const addBox = document.getElementById("add-rating-box");
@@ -47,7 +47,6 @@ export async function handleActionButton(buttonId, payload = {}) {
     const data = await res.json();
 
     const movies = Array.isArray(data) ? data : data?.ratings || [];
-    const isRecs = data?.source === "recs";
 
     if (!movies.length) {
       // If server returned a message (e.g. ok/message on add/remove), show it
@@ -59,7 +58,10 @@ export async function handleActionButton(buttonId, payload = {}) {
       return;
     }
 
-    renderMovies(movies, isRecs, outputDiv);
+    // Render all results in grid tile format (like browse page)
+    const grid = renderMovieTiles(movies);
+    outputDiv.innerHTML = "";
+    outputDiv.appendChild(grid);
   } catch (err) {
     outputDiv.textContent = "Error contacting backend.";
     console.error(err);

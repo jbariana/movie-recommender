@@ -1,7 +1,7 @@
 /**
  * browse.js
  * Dedicated script for the browse page.
- * Auto-loads recommendations in a tile grid layout.
+ * Auto-loads recommendations in a tile grid layout with client-side pagination.
  */
 
 import { isLoggedIn } from "./utils.js";
@@ -13,100 +13,142 @@ import {
   checkSession,
   setupNavigation,
   setupSearch,
+  renderMovieTiles,
 } from "./shared.js";
 
 const outputDiv = document.getElementById("output");
+let currentPage = 0;
+let allRecommendations = [];
+const PAGE_SIZE = 30;
 
-// Render movies in tile/grid layout
-function renderMovieTiles(movies) {
-  const grid = document.createElement("div");
-  grid.className = "movie-grid";
-
-  movies.forEach((movie) => {
-    const tile = document.createElement("div");
-    tile.className = "movie-tile";
-    tile.dataset.movieId = movie.movie_id;
-
-    const placeholder = document.createElement("div");
-    placeholder.className = "movie-poster-tile";
-    placeholder.textContent = "No Poster";
-
-    const title = document.createElement("div");
-    title.className = "movie-tile-title";
-    title.textContent = movie.title;
-
-    const meta = document.createElement("div");
-    meta.className = "movie-tile-meta";
-    const yearStr = movie.year ? `${movie.year}` : "";
-    const genresStr = movie.genres ? ` • ${movie.genres}` : "";
-    meta.textContent = `${yearStr}${genresStr}`;
-
-    const rating = document.createElement("div");
-    rating.className = "movie-tile-rating";
-    rating.textContent = movie.rating
-      ? `★ ${movie.rating.toFixed(1)}`
-      : "Predicted";
-
-    tile.appendChild(placeholder);
-    tile.appendChild(title);
-    tile.appendChild(meta);
-    tile.appendChild(rating);
-
-    tile.addEventListener("click", () => {
-      showRatingModal(movie.movie_id, movie.title, movie.rating);
-    });
-
-    grid.appendChild(tile);
-  });
-
-  outputDiv.innerHTML = "";
-  outputDiv.appendChild(grid);
-}
-
-// Load recommendations
-async function loadRecommendations() {
-  const loggedIn = await isLoggedIn();
-
-  if (!loggedIn) {
-    outputDiv.innerHTML =
-      '<p>Please <a href="/">login</a> to see recommendations.</p>';
-    return;
-  }
-
-  outputDiv.textContent = "Loading recommendations...";
-
+/**
+ * Load ALL recommendations from API once
+ */
+async function loadAllRecommendations() {
   try {
-    const res = await fetch("/api/button-click", {
+    const response = await fetch("/api/button-click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ button: "get_rec_button" }),
       credentials: "same-origin",
     });
 
-    if (!res.ok) {
-      outputDiv.textContent = "Failed to load recommendations.";
-      return;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
 
-    const data = await res.json();
-    const movies = data?.ratings || [];
+    const data = await response.json();
 
-    if (movies.length === 0) {
-      outputDiv.innerHTML =
-        '<p>No recommendations yet. <a href="/">Rate some movies</a> to get started!</p>';
-      return;
+    if (data.error) {
+      return [];
     }
 
-    renderMovieTiles(movies);
-  } catch (err) {
-    console.error("Error loading recommendations:", err);
-    outputDiv.textContent = "Error loading recommendations.";
+    return data.ratings || [];
+  } catch (error) {
+    console.error("Failed to load recommendations:", error);
+    return [];
   }
 }
 
-// Search handler
+/**
+ * Load initial page
+ */
+async function loadRecommendations() {
+  try {
+    outputDiv.innerHTML =
+      '<div class="loading">Loading recommendations...</div>';
+
+    const newRecs = await loadAllRecommendations();
+
+    if (newRecs.length === 0) {
+      outputDiv.innerHTML =
+        '<div class="info-message">No recommendations available. Try rating some movies first!</div>';
+      return;
+    }
+
+    allRecommendations = newRecs;
+    currentPage = 0;
+    renderPage();
+  } catch (error) {
+    console.error("Failed to load recommendations:", error);
+    outputDiv.innerHTML = `<div class="error-message">Failed to load recommendations: ${error.message}</div>`;
+  }
+}
+
+/**
+ * Render current page of recommendations
+ */
+function renderPage() {
+  const startIdx = currentPage * PAGE_SIZE;
+  const endIdx = startIdx + PAGE_SIZE;
+  const pageMovies = allRecommendations.slice(startIdx, endIdx);
+
+  if (pageMovies.length === 0 && currentPage > 0) {
+    // Went past the end, go back
+    currentPage = Math.max(
+      0,
+      Math.floor((allRecommendations.length - 1) / PAGE_SIZE)
+    );
+    renderPage();
+    return;
+  }
+
+  if (allRecommendations.length === 0) {
+    outputDiv.innerHTML =
+      '<div class="info-message">No recommendations available.</div>';
+    return;
+  }
+
+  // Create container
+  const container = document.createElement("div");
+  container.className = "browse-container";
+
+  // Movie grid
+  const grid = renderMovieTiles(pageMovies);
+  container.appendChild(grid);
+
+  // Pagination controls (only show if more than one page)
+  const totalPages = Math.ceil(allRecommendations.length / PAGE_SIZE);
+  if (totalPages > 1) {
+    const controls = document.createElement("div");
+    controls.className = "pagination-controls";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.className = "pagination-btn";
+    prevBtn.textContent = "← Previous";
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => {
+      if (currentPage > 0) {
+        currentPage--;
+        renderPage();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    };
+
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "pagination-btn";
+    nextBtn.textContent = "Next →";
+    nextBtn.disabled = endIdx >= allRecommendations.length;
+    nextBtn.onclick = () => {
+      if (endIdx < allRecommendations.length) {
+        currentPage++;
+        renderPage();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    };
+
+    controls.appendChild(prevBtn);
+    controls.appendChild(nextBtn);
+    container.appendChild(controls);
+  }
+
+  outputDiv.innerHTML = "";
+  outputDiv.appendChild(container);
+}
+
+// Search handler - now uses shared tile renderer
 async function handleSearch(query) {
-  outputDiv.textContent = "Searching...";
+  outputDiv.innerHTML = '<div class="loading">Searching...</div>';
 
   try {
     const res = await fetch("/api/button-click", {
@@ -120,12 +162,15 @@ async function handleSearch(query) {
     const movies = data?.ratings || [];
 
     if (movies.length === 0) {
-      outputDiv.textContent = "No results found.";
+      outputDiv.innerHTML = '<div class="info-message">No results found.</div>';
     } else {
-      renderMovieTiles(movies);
+      // Show search results in grid format using shared renderer
+      const grid = renderMovieTiles(movies);
+      outputDiv.innerHTML = "";
+      outputDiv.appendChild(grid);
     }
   } catch (err) {
-    outputDiv.textContent = "Search failed.";
+    outputDiv.innerHTML = '<div class="error-message">Search failed.</div>';
   }
 }
 

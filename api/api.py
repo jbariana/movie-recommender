@@ -105,7 +105,7 @@ def handle_button_click(button_id, payload=None):
         except Exception:
             uid = 99
 
-        recs = recommend_titles_for_user(uid)
+        recs = recommend_titles_for_user(uid, k=500)
 
         results = []
         for item in recs:

@@ -4,6 +4,8 @@
  * Reduces code duplication between index and browse pages.
  */
 
+import { showRatingModal } from "./ratingModal.js";
+
 // Logged out HTML template
 let LOGGED_OUT_HTML = "";
 
@@ -90,6 +92,70 @@ export function setupNavigation() {
       window.location.href = "/?view=profile";
     }
   });
+}
+
+/**
+ * Render movie tiles grid (shared grid format for all pages)
+ */
+export function renderMovieTiles(movies) {
+  const grid = document.createElement("div");
+  grid.className = "movie-grid";
+
+  movies.forEach((movie) => {
+    const tile = document.createElement("div");
+    tile.className = "movie-tile";
+    tile.dataset.movieId = movie.movie_id;
+
+    // Poster: image if available, else placeholder
+    let posterEl;
+    if (movie.poster_url) {
+      posterEl = document.createElement("img");
+      posterEl.className = "movie-poster-img";
+      posterEl.src = movie.poster_url;
+      posterEl.alt = movie.title || `ID ${movie.movie_id}`;
+      posterEl.loading = "lazy";
+      posterEl.onerror = function () {
+        this.style.display = "none";
+        const placeholder = document.createElement("div");
+        placeholder.className = "movie-poster-tile";
+        placeholder.textContent = "No Poster";
+        this.parentNode.insertBefore(placeholder, this);
+      };
+    } else {
+      posterEl = document.createElement("div");
+      posterEl.className = "movie-poster-tile";
+      posterEl.textContent = "No Poster";
+    }
+
+    const title = document.createElement("div");
+    title.className = "movie-tile-title";
+    title.textContent = movie.title;
+
+    const meta = document.createElement("div");
+    meta.className = "movie-tile-meta";
+    const yearStr = movie.year ? `${movie.year}` : "";
+    const genresStr = movie.genres ? ` • ${movie.genres}` : "";
+    meta.textContent = `${yearStr}${genresStr}`;
+
+    const rating = document.createElement("div");
+    rating.className = "movie-tile-rating";
+    rating.textContent = movie.rating
+      ? `★ ${Number(movie.rating).toFixed(1)}`
+      : "Unrated";
+
+    tile.appendChild(posterEl);
+    tile.appendChild(title);
+    tile.appendChild(meta);
+    tile.appendChild(rating);
+
+    tile.addEventListener("click", () => {
+      showRatingModal(movie.movie_id, movie.title, movie.rating);
+    });
+
+    grid.appendChild(tile);
+  });
+
+  return grid;
 }
 
 export function setupSearch(onSearch) {

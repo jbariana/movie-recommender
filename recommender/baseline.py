@@ -55,7 +55,7 @@ def recommend_for_user(user_id: int, k: int = 10) -> List[Tuple[int, float]]:
     recs = [(int(movie_ids[i]), float(scores[i])) for i in top_idx if np.isfinite(scores[i])]
     return recs[:k]
 
-def recommend_titles_for_user(user_id: int, k: int = 10):
+def recommend_titles_for_user(user_id: int, k: int = 500):  # Changed default from 10 to 500
     recs = recommend_for_user(user_id, k)
     
     from database.connection import get_db
@@ -68,21 +68,36 @@ def recommend_titles_for_user(user_id: int, k: int = 10):
     with get_db(readonly=True) as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT movie_id, title, poster_url FROM movies WHERE movie_id IN ({ph_list(len(movie_ids))})",
+            f"SELECT movie_id, title, poster_url, year, genres FROM movies WHERE movie_id IN ({ph_list(len(movie_ids))})",
             movie_ids
         )
         rows = cur.fetchall()
     
-    title_map = {int(mid): {"title": title, "poster_url": poster} for mid, title, poster in rows}
+    movie_map = {
+        int(mid): {
+            "title": title, 
+            "poster_url": poster,
+            "year": year,
+            "genres": genres
+        } 
+        for mid, title, poster, year, genres in rows
+    }
     
     results = []
     for mid, score in recs:
-        info = title_map.get(mid, {"title": f"ID {mid}", "poster_url": None})
+        info = movie_map.get(mid, {
+            "title": f"ID {mid}", 
+            "poster_url": None,
+            "year": None,
+            "genres": None
+        })
         results.append({
             "movie_id": mid,
             "title": info["title"],
             "rating": score,
-            "poster_url": info["poster_url"]
+            "poster_url": info["poster_url"],
+            "year": info["year"],
+            "genres": info["genres"]
         })
     
     return results

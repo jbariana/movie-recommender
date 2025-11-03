@@ -6,6 +6,7 @@
 
 import { handleActionButton } from "./actionHandler.js";
 import { showRatingModal } from "./ratingModal.js";
+import { renderMovieTiles } from "./shared.js";
 
 const outputDiv = document.getElementById("output");
 const searchInput = document.getElementById("search_input");
@@ -132,7 +133,7 @@ document.addEventListener("click", (ev) => {
   ];
   if (delegatedIgnore.includes(id)) return;
 
-  // handle search button - now shows full results
+  // handle search button - shows full results in tile grid
   if (id === "search_button") {
     ev.preventDefault();
     const qEl = document.getElementById("search_input");
@@ -141,11 +142,36 @@ document.addEventListener("click", (ev) => {
       outputDiv.textContent = "Enter a search term.";
       return;
     }
-    // Close dropdown and show full results
+    // Close dropdown and show full results in tile grid
     if (searchDropdown) {
       searchDropdown.classList.remove("visible");
     }
-    handleActionButton("search", { query });
+
+    // Show full search results in grid format
+    outputDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+    fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ button: "search", query }),
+      credentials: "same-origin",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const movies = data?.ratings || [];
+        if (movies.length === 0) {
+          outputDiv.innerHTML =
+            '<div class="info-message">No results found.</div>';
+        } else {
+          const grid = renderMovieTiles(movies);
+          outputDiv.innerHTML = "";
+          outputDiv.appendChild(grid);
+        }
+      })
+      .catch(() => {
+        outputDiv.innerHTML = '<div class="error-message">Search failed.</div>';
+      });
+
     return;
   }
 
@@ -181,7 +207,7 @@ document.addEventListener("click", (ev) => {
   }
 });
 
-// support Enter key in the search input to trigger full search
+// support Enter key in the search input to trigger full search in grid format
 document.addEventListener("keydown", (ev) => {
   const active = document.activeElement;
   if (ev.key === "Enter" && active && active.id === "search_input") {
@@ -191,10 +217,33 @@ document.addEventListener("keydown", (ev) => {
       outputDiv.textContent = "Enter a search term.";
       return;
     }
-    // Close dropdown and show full results
+    // Close dropdown and show full results in tile grid
     if (searchDropdown) {
       searchDropdown.classList.remove("visible");
     }
-    handleActionButton("search", { query });
+
+    outputDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+    fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ button: "search", query }),
+      credentials: "same-origin",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const movies = data?.ratings || [];
+        if (movies.length === 0) {
+          outputDiv.innerHTML =
+            '<div class="info-message">No results found.</div>';
+        } else {
+          const grid = renderMovieTiles(movies);
+          outputDiv.innerHTML = "";
+          outputDiv.appendChild(grid);
+        }
+      })
+      .catch(() => {
+        outputDiv.innerHTML = '<div class="error-message">Search failed.</div>';
+      });
   }
 });
