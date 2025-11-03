@@ -1,6 +1,6 @@
 """
 init_db.py
-Creates the DB schema for the movie recommender (works for SQLite and Postgres).
+creates the DB schema 
 """
 
 from __future__ import annotations

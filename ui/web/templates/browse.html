@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Movie Recommender</title>
+    <title>Browse - Movie Recommender</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
@@ -16,14 +16,12 @@
 
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
           <div class="nav-left">
-            <button class="nav-tab" id="nav_home" aria-current="page">
-              Home
-            </button>
+            <button class="nav-tab" id="nav_home">Home</button>
             <button class="nav-tab" id="view_ratings_button">Profile</button>
             <a
               href="{{ url_for('browse_page') }}"
-              class="nav-tab"
-              id="get_rec_button"
+              class="nav-tab active"
+              aria-current="page"
               >Browse</a
             >
           </div>
@@ -58,41 +56,16 @@
     </header>
 
     <main class="container">
-      <div class="top-row">
-        <div class="user section">
-          <h2>Current User</h2>
-          <div class="user-controls">
-            <button id="view_statistics_button">View Statistics</button>
-            <button id="check_session_button">Check Session</button>
-            <p id="session_status" class="small-muted"></p>
-          </div>
-        </div>
+      <h2>Browse Recommendations</h2>
 
-        <div class="action section">
-          <h2>Actions</h2>
-          <div class="action-controls">
-            <button id="add_rating_button">Add Rating</button>
-            <div
-              id="add-rating-box"
-              class="add-rating-box"
-              aria-hidden="true"
-            ></div>
-            <button id="remove_rating_button">Remove Rating</button>
-          </div>
-        </div>
-      </div>
-
-      <section
-        id="output"
-        class="output"
-        role="region"
-        aria-live="polite"
-      ></section>
+      <section id="output" class="output" role="region" aria-live="polite">
+        Loading...
+      </section>
     </main>
 
     <script
       type="module"
-      src="{{ url_for('static', filename='js/main.js') }}"
+      src="{{ url_for('static', filename='js/browse.js') }}"
     ></script>
   </body>
 </html>

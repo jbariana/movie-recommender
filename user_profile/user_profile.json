@@ -43,6 +43,11 @@
       "rating": 1.0,
       "timestamp": 1761621068,
       "poster_url": "https://via.placeholder.com/185x278/1a2532/6c8ea4?text=Movie"
+    },
+    {
+      "movie_id": 100397,
+      "rating": 3.0,
+      "timestamp": 1762150352
     }
   ]
 }
