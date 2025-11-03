@@ -1,5 +1,4 @@
 /**
- * login.js
  * User authentication and session management.
  * Handles login/logout functionality and displays current user status.
  */
@@ -31,6 +30,11 @@ function renderLoggedIn(username) {
         });
         await res.json().catch(() => {});
         renderLoggedOut();
+
+        // If on browse page, redirect to home after logout
+        if (window.location.pathname === "/browse") {
+          window.location.href = "/";
+        }
       } catch (err) {
         const s = document.getElementById("login_status");
         if (s) s.textContent = "Logout failed.";
@@ -83,6 +87,11 @@ function initLoginHandlers() {
 
       if (res.ok) {
         renderLoggedIn(username);
+
+        if (window.location.pathname === "/browse") {
+          const { handleActionButton } = await import("./actionHandler.js");
+          handleActionButton("get_rec_button");
+        }
       } else {
         const errMsg =
           data?.error || data?.message || res.statusText || "Login failed";
@@ -103,7 +112,9 @@ async function checkSessionOnLoad() {
     if (!res.ok) return;
     const data = await res.json();
     if (data?.username) renderLoggedIn(data.username);
-  } catch (e) {}
+  } catch (e) {
+    console.error("Session check failed:", e);
+  }
 }
 
 initLoginHandlers();

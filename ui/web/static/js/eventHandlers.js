@@ -149,15 +149,17 @@ document.addEventListener("click", (ev) => {
     return;
   }
 
-  // map nav/profile/browse buttons to actions
-  if (id === "view_ratings_button" || id === "nav_home") {
+  // handle Home button - navigate to index
+  if (id === "nav_home") {
     ev.preventDefault();
-    handleActionButton("view_ratings_button");
+    window.location.href = "/";
     return;
   }
-  if (id === "get_rec_button") {
+
+  // map nav/profile buttons to actions
+  if (id === "view_ratings_button") {
     ev.preventDefault();
-    handleActionButton("get_rec_button");
+    handleActionButton("view_ratings_button");
     return;
   }
   if (id === "view_statistics_button") {

@@ -10,13 +10,14 @@
 
 *{box-sizing:border-box}
 
+/* Hide all scrollbars */
 * {
-  scrollbar-width: none; 
-  -ms-overflow-style: none;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 }
 
 *::-webkit-scrollbar {
-  display: none; 
+  display: none; /* Chrome, Safari, Opera */
 }
 
 body {
@@ -72,6 +73,7 @@ body {
   cursor: pointer;
   font-weight:600;
   transition: background 120ms ease;
+  text-decoration: none;
 }
 .nav-tab:hover{ color: #fff; background: #0c1a2a; }
 .nav-tab[aria-current="page"], .nav-tab.active{
@@ -181,7 +183,67 @@ body {
     width: 100%;
 }
 
-/* movie item */
+/* movie grid (tile layout for browse page) */
+.movie-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    padding: 12px;
+}
+
+.movie-tile {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 120ms ease;
+    border: 1px solid #1a2532;
+}
+
+.movie-tile:hover {
+    background: #0c1a2a;
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.movie-poster-tile {
+    width: 100%;
+    height: 240px;
+    background: #1a2532;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.movie-tile-title {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.movie-tile-meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.movie-tile-rating {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.85rem;
+}
+
+/* movie item (list layout for profile/search) */
 #output .movie {
     display: flex;
     align-items: center;
@@ -189,6 +251,7 @@ body {
     padding: 12px;
     border-bottom: 1px solid #1a2532;
     transition: background 120ms ease;
+    cursor: pointer;
 }
 #output .movie:last-child { border-bottom: none; }
 #output .movie:hover { background: #0c1a2a; }
@@ -456,6 +519,9 @@ body {
     }
     .user.section, .action.section {
         width: 100%;
+    }
+    .movie-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
 }
 
