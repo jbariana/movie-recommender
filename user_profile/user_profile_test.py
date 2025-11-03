@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import time
 from api.sync_user_json import sync_user_ratings
+from api.api import save_rating  # ✅ so local + DB stay synced
 
 PROFILE_PATH = Path(__file__).parent / "user_profile.json"
 
@@ -22,10 +23,17 @@ class UserProfile:
         except FileNotFoundError:
             return cls("xxxxxx")
 
+    @staticmethod
     def get_ratings_from_json():
-        return json.load(open(PROFILE_PATH, "r", encoding="utf-8")).get("ratings", [])
+        """Return ratings list directly from JSON file."""
+        try:
+            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f).get("ratings", [])
+        except FileNotFoundError:
+            return []
 
     def to_file(self):
+        """Save the profile (user ID + ratings) to JSON and trigger sync."""
         data = {
             "user_id": self.user_id,
             "ratings": self.ratings
@@ -33,13 +41,15 @@ class UserProfile:
         PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-        # trigger sync right after writing the profile (one-shot, no watcher)
+
+        # trigger one-shot sync to DB (non-blocking)
         try:
             sync_user_ratings(PROFILE_PATH)
         except Exception as e:
-            print(f"Warning: sync failed: {e}")
+            print(f"⚠️  Warning: JSON sync failed: {e}")
 
     def add_rating(self, movie_id, rating):
+        """Add a rating locally and save both JSON + DB."""
         entry = {
             "movie_id": int(movie_id),
             "rating": float(rating),
@@ -48,24 +58,33 @@ class UserProfile:
         self.ratings.append(entry)
         self.to_file()
 
+        # ✅ NEW: also save to DB immediately
+        try:
+            save_rating(self.user_id, movie_id, rating)
+        except Exception as e:
+            print(f"⚠️  Warning: failed to save rating to DB ({e})")
+
     def get_rating(self, movie_id):
         for r in self.ratings:
             if r.get("movie_id") == movie_id:
                 return r.get("rating")
 
     def reset(self):
+        """Reset the user profile to default."""
         self.user_id = "99"
         self.ratings = []
         self.to_file()
-        
+
     def getUserID(self):
         return self.user_id
-    
+
     def setUserID(self, new_user_id):
+        """Update the user ID and save immediately."""
         self.user_id = new_user_id
         self.to_file()
-        
+
     def randomize(self, num_ratings):
+        """Generate random ratings for testing."""
         import random
         movie_ids = list(range(1, 9743))
         self.ratings = []
@@ -78,5 +97,3 @@ class UserProfile:
                 "timestamp": int(time.time())
             })
         self.to_file()
-
-
