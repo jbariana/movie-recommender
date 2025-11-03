@@ -3,9 +3,12 @@ from pathlib import Path
 import logging
 from datetime import timedelta
 import json
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__, template_folder="ui/web/templates", static_folder="ui/web/static")
-app.secret_key = "supersecretkey"
+load_dotenv()
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 app.permanent_session_lifetime = timedelta(hours=2)
 
 @app.before_request

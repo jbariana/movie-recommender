@@ -1,49 +1,66 @@
 """
 data_loader.py
-Convenience functions to read from SQLite for training/evaluation.
-
-Examples:
-    from recommender.data_loader import load_ratings_df, iter_user_ratings
-
-    df = load_ratings_df()
-    for user_id, movie_id, rating in iter_user_ratings(user_ids=[1,2,3]):
-        ...
+Loads rating and movie data from the database into pandas DataFrames.
+Provides utility functions for the recommendation engine.
 """
 
 from __future__ import annotations
 from typing import Generator, Iterable, Tuple
 import pandas as pd
-import os
-from sqlalchemy import create_engine
+from database.connection import get_db, DATABASE_URL, DB_PATH
 from database.paramstyle import PH, ph_list
+from sqlalchemy import create_engine
 
-# Reuse the same DB helper
-from database.connection import get_db
+def _get_sqlalchemy_url():
+    """
+    Convert DATABASE_URL or SQLite path to SQLAlchemy-compatible URL.
+    """
+    if DATABASE_URL:
+        # PostgreSQL URL from environment
+        return DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+    else:
+        # SQLite local database
+        return f"sqlite:///{DB_PATH}"
+
+def _sa_engine_for_loader():
+    """Create and return a SQLAlchemy engine for pandas operations."""
+    return create_engine(_get_sqlalchemy_url())
 
 def load_movies_df(columns: list[str] | None = None) -> pd.DataFrame:
+    """Load movies with specified columns using SQLAlchemy engine."""
     cols = columns or ["movie_id", "title", "year", "genres"]
     q = f"SELECT {', '.join(cols)} FROM movies"
-    with get_db(readonly=True) as conn:
-        return pd.read_sql_query(q, conn)
+    engine = _sa_engine_for_loader()
+    try:
+        return pd.read_sql_query(q, engine)
+    finally:
+        engine.dispose()
 
 def load_ratings_df(min_ratings_per_user: int | None = None) -> pd.DataFrame:
     """
     Returns a DataFrame with columns: user_id, movie_id, rating, timestamp.
     Optionally filters to users with at least `min_ratings_per_user` ratings.
+    Uses SQLAlchemy engine to avoid pandas warnings.
     """
-    with get_db(readonly=True) as conn:
+    engine = _sa_engine_for_loader()
+    try:
         if min_ratings_per_user is None:
-            return pd.read_sql_query("SELECT * FROM ratings", conn)
-        q = f"""
+            return pd.read_sql_query("SELECT * FROM ratings", engine)
+        
+        # Use parameterized query for filtering
+        q = """
             WITH cnt AS (
               SELECT user_id, COUNT(*) AS n FROM ratings GROUP BY user_id
             )
             SELECT r.*
             FROM ratings r
             JOIN cnt ON cnt.user_id = r.user_id
-            WHERE cnt.n >= {PH}
+            WHERE cnt.n >= ?
         """
-        return pd.read_sql_query(q, conn, params=(min_ratings_per_user,))
+        return pd.read_sql_query(q, engine, params=(min_ratings_per_user,))
+    finally:
+        engine.dispose()
+
 def load_user_item_matrix() -> pd.DataFrame:
     """
     Returns a pivoted user-item matrix (users as rows, movies as columns).
@@ -88,16 +105,18 @@ def get_movie_titles(movie_ids: Iterable[int]) -> dict[int, str]:
         rows = cur.fetchall()
     return {int(mid): title for (mid, title) in rows}
 
-def _sa_engine_for_loader():
-    from database.load_movielens import _engine as _lm_engine  # reuse existing helper
-    return _lm_engine()
-
 def load_ratings_data():
     """Load ratings data using SQLAlchemy engine for pandas compatibility."""
     engine = _sa_engine_for_loader()
-    return pd.read_sql_query("SELECT * FROM ratings", engine)
+    try:
+        return pd.read_sql_query("SELECT * FROM ratings", engine)
+    finally:
+        engine.dispose()
 
 def load_movies_data():
     """Load movies data using SQLAlchemy engine for pandas compatibility."""
     engine = _sa_engine_for_loader()
-    return pd.read_sql_query("SELECT * FROM movies", engine)
+    try:
+        return pd.read_sql_query("SELECT * FROM movies", engine)
+    finally:
+        engine.dispose()
