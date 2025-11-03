@@ -74,27 +74,55 @@ def handle_button_click(button_id, payload=None):
 
     # --- View Statistics ---
     if button_id == "view_statistics_button":
-        data = json.loads(PROFILE_PATH.read_text())
-        raw_ratings = [r.get("rating") for r in data.get("ratings", []) if r.get("rating") is not None]
-        total = len(raw_ratings)
-        counts = Counter()
-        for v in raw_ratings:
-            try:
-                iv = int(v)
-            except Exception:
-                continue
-            counts[iv] += 1
-
-        stats_items = [
-            ("Num ratings", total),
-            ("Num 5s", counts.get(5, 0)),
-            ("Num 4s", counts.get(4, 0)),
-            ("Num 3s", counts.get(3, 0)),
-            ("Num 2s", counts.get(2, 0)),
-            ("Num 1s", counts.get(1, 0)),
-        ]
-        results = [{"title": name, "rating": value} for name, value in stats_items]
-        return {"ratings": results, "source": "stats"}
+        try:
+            profile = json.loads(PROFILE_PATH.read_text())
+            ratings_list = profile.get("ratings", [])
+            
+            if not ratings_list:
+                return {"statistics": {"total_ratings": 0, "average_rating": 0, "top_genres": []}}
+            
+            # Calculate statistics from ratings list
+            total = len(ratings_list)
+            rating_values = [r.get("rating") for r in ratings_list if r.get("rating") is not None]
+            avg = sum(rating_values) / len(rating_values) if rating_values else 0
+            
+            # Get genre counts from database
+            from database.connection import get_db
+            from database.paramstyle import ph_list
+            
+            movie_ids = [r.get("movie_id") for r in ratings_list if r.get("movie_id") is not None]
+            genre_counter = Counter()
+            
+            if movie_ids:
+                with get_db(readonly=True) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SELECT genres FROM movies WHERE movie_id IN ({ph_list(len(movie_ids))})",
+                        movie_ids
+                    )
+                    for row in cur.fetchall():
+                        genres_str = row[0] if row else ""
+                        if genres_str:
+                            for genre in genres_str.split("|"):
+                                genre = genre.strip()
+                                if genre:
+                                    genre_counter[genre] += 1
+            
+            top_genres = [
+                {"genre": genre, "count": count}
+                for genre, count in genre_counter.most_common(10)
+            ]
+            
+            return {
+                "statistics": {
+                    "total_ratings": total,
+                    "average_rating": avg,
+                    "top_genres": top_genres
+                }
+            }
+        except Exception as e:
+            logger.error(f"Statistics error: {e}")
+            return {"statistics": {"total_ratings": 0, "average_rating": 0, "top_genres": []}}
 
     # --- Get Recommendations ---
     if button_id == "get_rec_button":

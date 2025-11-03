@@ -12,9 +12,9 @@ import {
   renderLoggedOut,
   checkSession,
   setupNavigation,
-  setupSearch,
   renderMovieTiles,
 } from "./shared.js";
+import { initSearch } from "./search.js";
 
 const outputDiv = document.getElementById("output");
 let currentPage = 0;
@@ -146,34 +146,6 @@ function renderPage() {
   outputDiv.appendChild(container);
 }
 
-// Search handler - now uses shared tile renderer
-async function handleSearch(query) {
-  outputDiv.innerHTML = '<div class="loading">Searching...</div>';
-
-  try {
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ button: "search", query }),
-      credentials: "same-origin",
-    });
-
-    const data = await res.json();
-    const movies = data?.ratings || [];
-
-    if (movies.length === 0) {
-      outputDiv.innerHTML = '<div class="info-message">No results found.</div>';
-    } else {
-      // Show search results in grid format using shared renderer
-      const grid = renderMovieTiles(movies);
-      outputDiv.innerHTML = "";
-      outputDiv.appendChild(grid);
-    }
-  } catch (err) {
-    outputDiv.innerHTML = '<div class="error-message">Search failed.</div>';
-  }
-}
-
 // Initialize
 async function init() {
   initLoginUI();
@@ -189,7 +161,13 @@ async function init() {
   }
 
   setupNavigation();
-  setupSearch(handleSearch);
+
+  // Initialize search functionality
+  const searchInput = document.getElementById("search_input");
+  const searchButton = document.getElementById("search_button");
+  if (searchInput && searchButton) {
+    initSearch(searchInput, searchButton, outputDiv);
+  }
 
   // Reload recommendations after login
   window.addEventListener("userLoggedIn", loadRecommendations);
