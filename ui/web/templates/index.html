@@ -38,24 +38,35 @@
               <button id="search_button" type="button">Search</button>
             </div>
 
-            <form id="login_form" class="login-form" onsubmit="return false;">
-              <input
-                id="username"
-                type="text"
-                placeholder="Username"
-                aria-label="username"
-              />
-              <button id="login_button" type="button">Login</button>
-              <small
-                id="login_status"
-                class="login-status"
-                aria-live="polite"
-              ></small>
-            </form>
+            {% if session.get('username') %}
+              <!-- Logged in: show user + Logout (hashed-auth flow) -->
+              <form method="POST" action="{{ url_for('api_bp.auth_logout') }}" class="login-form" style="margin-left:.75rem;">
+                <small class="login-status">Logged in as <b>{{ session['username'] }}</b></small>
+                <button type="submit" style="margin-left:.5rem;">Logout</button>
+              </form>
+            {% else %}
+              <!-- Logged out: links to new auth pages -->
+              <div class="auth-links" style="margin-left:.75rem;">
+                <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
+                <span aria-hidden="true"> · </span>
+                <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
+              </div>
+            {% endif %}
           </div>
         </nav>
       </div>
     </header>
+
+    <!-- Flash messages (success/errors from signup/login) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul style="margin:1rem; list-style:disc;">
+          {% for category, message in messages %}
+            <li style="color: {{ 'salmon' if category=='error' else '#22c55e' }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
 
     <main class="container">
       <div class="top-row">

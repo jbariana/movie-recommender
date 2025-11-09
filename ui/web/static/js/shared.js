@@ -1,19 +1,20 @@
 /**
  * shared.js
- * shared utilities for login, navigation, and search across pages
+ * shared utilities for login, navigation, search, and home actions
  */
 
 import { showRatingModal } from "./ratingModal.js";
 
 let LOGGED_OUT_HTML = "";
 
-//store original login form HTML
+// ------------------------------
+// Login UI (legacy nav slot)
+// ------------------------------
 export function initLoginUI() {
   const loginForm = document.getElementById("login_form");
   if (loginForm) LOGGED_OUT_HTML = loginForm.innerHTML;
 }
 
-//render logged in state with username and logout button
 export function renderLoggedIn(username) {
   const loginForm = document.getElementById("login_form");
   if (!loginForm) return;
@@ -24,45 +25,28 @@ export function renderLoggedIn(username) {
     <small id="login_status" class="login-status">Logged in</small>
   `;
 
-  document
-    .getElementById("logout_button")
-    .addEventListener("click", async () => {
-      await fetch("/logout", { method: "POST", credentials: "same-origin" });
-      window.location.href = "/";
-    });
+  document.getElementById("logout_button")?.addEventListener("click", async () => {
+    await fetch("/logout", { method: "POST", credentials: "same-origin" });
+    window.location.href = "/";
+  });
 }
 
-//render logged out state with login form
 export function renderLoggedOut() {
   const loginForm = document.getElementById("login_form");
   if (!loginForm) return;
 
-  loginForm.innerHTML = LOGGED_OUT_HTML;
-
-  const btn = document.getElementById("login_button");
-  const input = document.getElementById("username");
-
-  if (btn && input) {
-    btn.onclick = async () => {
-      const username = input.value.trim();
-      if (!username) return;
-
-      const res = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-        credentials: "same-origin",
-      });
-
-      if (res.ok) {
-        renderLoggedIn(username);
-        window.dispatchEvent(new CustomEvent("userLoggedIn"));
-      }
-    };
-  }
+  // Keep your old markup, but if you’ve disabled /login on the backend,
+  // show links to the auth pages instead of posting to /login.
+  loginForm.innerHTML = `
+    <a class="nav-tab" href="/auth/login">Login</a>
+    <a class="nav-tab" href="/auth/signup">Sign&nbsp;up</a>
+    <small id="login_status" class="login-status"></small>
+  `;
 }
 
-//check if user is logged in
+// ------------------------------
+// Session
+// ------------------------------
 export async function checkSession() {
   try {
     const res = await fetch("/session", { credentials: "same-origin" });
@@ -76,7 +60,9 @@ export async function checkSession() {
   return null;
 }
 
-//setup navigation handlers
+// ------------------------------
+// Navigation helpers
+// ------------------------------
 export function setupNavigation() {
   document.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button, a");
@@ -94,7 +80,9 @@ export function setupNavigation() {
   });
 }
 
-//render movies in tile grid format
+// ------------------------------
+// Movie grid renderer
+// ------------------------------
 export function renderMovieTiles(movies) {
   const grid = document.createElement("div");
   grid.className = "movie-grid";
@@ -104,7 +92,6 @@ export function renderMovieTiles(movies) {
     tile.className = "movie-tile";
     tile.dataset.movieId = movie.movie_id;
 
-    //add poster or placeholder
     let posterEl;
     if (movie.poster_url) {
       posterEl = document.createElement("img");
@@ -125,28 +112,19 @@ export function renderMovieTiles(movies) {
       posterEl.textContent = "No Poster";
     }
 
-    //add title
     const title = document.createElement("div");
     title.className = "movie-tile-title";
     title.textContent = movie.title;
 
-    //add metadata (year and genres)
     const meta = document.createElement("div");
     meta.className = "movie-tile-meta";
-    meta.textContent = `${movie.year || ""}${
-      movie.genres ? ` • ${movie.genres}` : ""
-    }`;
+    meta.textContent = `${movie.year || ""}${movie.genres ? ` • ${movie.genres}` : ""}`;
 
-    //add rating display
     const rating = document.createElement("div");
     rating.className = "movie-tile-rating";
-    rating.textContent = movie.rating
-      ? `★ ${Number(movie.rating).toFixed(1)}`
-      : "Unrated";
+    rating.textContent = movie.rating ? `★ ${Number(movie.rating).toFixed(1)}` : "Unrated";
 
     tile.append(posterEl, title, meta, rating);
-
-    //open rating modal on click
     tile.addEventListener("click", () => {
       showRatingModal(movie.movie_id, movie.title, movie.rating);
     });
@@ -157,7 +135,9 @@ export function renderMovieTiles(movies) {
   return grid;
 }
 
-//setup search handlers
+// ------------------------------
+// Search
+// ------------------------------
 export function setupSearch(onSearch) {
   const searchInput = document.getElementById("search_input");
   const searchButton = document.getElementById("search_button");
@@ -181,3 +161,65 @@ export function setupSearch(onSearch) {
     }
   });
 }
+
+// ======================================================
+// NEW: Home actions wiring (View Statistics & Session)
+// ======================================================
+export function renderJSON(el, data, title = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "json-block";
+  if (title) {
+    const h = document.createElement("h3");
+    h.textContent = title;
+    wrap.appendChild(h);
+  }
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(data, null, 2);
+  wrap.appendChild(pre);
+  el.innerHTML = "";
+  el.appendChild(wrap);
+}
+
+export async function fireButton(buttonId, extraPayload = {}) {
+  const res = await fetch("/api/button-click", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ button: buttonId, ...extraPayload }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+export function wireHomeActions(outputEl) {
+  const statsBtn = document.getElementById("view_statistics_button");
+  const sessBtn  = document.getElementById("check_session_button");
+
+  if (statsBtn) {
+    statsBtn.addEventListener("click", async () => {
+      try {
+        // Use the exact id your backend expects in api.api.handle_button_click
+        // Change this string if your handler uses a different button name.
+        const data = await fireButton("view_statistics_button");
+        renderJSON(outputEl, data, "Rating Statistics");
+      } catch (e) {
+        outputEl.innerHTML = `<div class="error-message">Failed to load stats: ${e.message}</div>`;
+      }
+    });
+  }
+
+  if (sessBtn) {
+    sessBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/session", { credentials: "same-origin" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const title = data?.username ? `Logged in as: ${data.username}` : "No active session";
+        renderJSON(outputEl, data, title);
+      } catch (e) {
+        outputEl.innerHTML = `<div class="error-message">Failed to check session: ${e.message}</div>`;
+      }
+    });
+  }
+}
+

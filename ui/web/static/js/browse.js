@@ -1,7 +1,6 @@
 /**
  * browse.js
- * dedicated script for the browse page
- * auto-loads recommendations in a tile grid layout with client-side pagination
+ * Existing recommendations view + new optional filter/sort catalog.
  */
 
 import { isLoggedIn } from "./utils.js";
@@ -17,33 +16,84 @@ import {
 import { initSearch } from "./search.js";
 
 const outputDiv = document.getElementById("output");
-let currentPage = 0;
-let allRecommendations = [];
-const PAGE_SIZE = 30;
 
-//load all recommendations from API once
+// ---------------- Existing recommendations state ----------------
+let recCurrentPage = 0;
+let allRecommendations = [];
+const REC_PAGE_SIZE = 30;
+
+// ---------------- Catalog (filter/sort) state ----------------
+const genreSelect = document.getElementById("genreSelect");
+const sortSelect  = document.getElementById("sortSelect");
+const dirSelect   = document.getElementById("dirSelect");
+const applyBtn    = document.getElementById("applyFiltersBtn");
+const resetBtn    = document.getElementById("resetFiltersBtn");
+const metaSpan    = document.getElementById("browseMeta");
+const pager       = document.getElementById("browsePager");
+const prevBtn     = document.getElementById("prevBtn");
+const nextBtn     = document.getElementById("nextBtn");
+const pageInfo    = document.getElementById("pageInfo");
+
+let mode = "recs"; // "recs" | "catalog"
+const state = {
+  genre: "",
+  sort: "title",
+  dir: "asc",
+  page: 1,
+  page_size: 20,
+  total: 0,
+};
+
+function toQuery(o) {
+  const p = new URLSearchParams();
+  for (const [k,v] of Object.entries(o)) {
+    if (v !== "" && v != null) p.set(k, v);
+  }
+  return p.toString();
+}
+
+// ---------------- API helpers for new catalog ----------------
+async function fetchGenres() {
+  try {
+    const r = await fetch("/api/genres");
+    if (!r.ok) return;
+    const data = await r.json();
+    for (const g of data.genres || []) {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.textContent = g;
+      genreSelect.appendChild(opt);
+    }
+  } catch (e) {
+    console.warn("genres fetch failed", e);
+  }
+}
+
+async function fetchMoviesPage() {
+  const q = toQuery({
+    genre: state.genre,
+    sort: state.sort,
+    dir: state.dir,
+    page: state.page,
+    page_size: state.page_size,
+  });
+  const r = await fetch(`/api/movies?${q}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ---------------- Existing recommendations flow ----------------
 async function loadAllRecommendations() {
   try {
-    //request recommendations from backend
     const response = await fetch("/api/button-click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ button: "get_rec_button" }),
       credentials: "same-origin",
     });
-
-    //handle HTTP errors
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-
-    //handle API errors
-    if (data.error) {
-      return [];
-    }
-
+    if (data.error) return [];
     return data.ratings || [];
   } catch (error) {
     console.error("Failed to load recommendations:", error);
@@ -51,137 +101,198 @@ async function loadAllRecommendations() {
   }
 }
 
-//load initial page of recommendations
-async function loadRecommendations() {
-  try {
-    //show loading indicator
-    outputDiv.innerHTML =
-      '<div class="loading">Loading recommendations...</div>';
-
-    //fetch all recommendations from backend
-    const newRecs = await loadAllRecommendations();
-
-    //handle empty results
-    if (newRecs.length === 0) {
-      outputDiv.innerHTML =
-        '<div class="info-message">No recommendations available. Try rating some movies first!</div>';
-      return;
-    }
-
-    //store recommendations and render first page
-    allRecommendations = newRecs;
-    currentPage = 0;
-    renderPage();
-  } catch (error) {
-    console.error("Failed to load recommendations:", error);
-    outputDiv.innerHTML = `<div class="error-message">Failed to load recommendations: ${error.message}</div>`;
-  }
-}
-
-//render current page of recommendations
-function renderPage() {
-  //calculate page boundaries
-  const startIdx = currentPage * PAGE_SIZE;
-  const endIdx = startIdx + PAGE_SIZE;
+function renderRecsPage() {
+  const startIdx = recCurrentPage * REC_PAGE_SIZE;
+  const endIdx = startIdx + REC_PAGE_SIZE;
   const pageMovies = allRecommendations.slice(startIdx, endIdx);
 
-  //handle out of bounds page number
-  if (pageMovies.length === 0 && currentPage > 0) {
-    currentPage = Math.max(
-      0,
-      Math.floor((allRecommendations.length - 1) / PAGE_SIZE)
-    );
-    renderPage();
-    return;
+  if (pageMovies.length === 0 && recCurrentPage > 0) {
+    recCurrentPage = Math.max(0, Math.floor((allRecommendations.length - 1) / REC_PAGE_SIZE));
+    return renderRecsPage();
   }
 
-  //handle empty recommendations
   if (allRecommendations.length === 0) {
-    outputDiv.innerHTML =
-      '<div class="info-message">No recommendations available.</div>';
+    outputDiv.innerHTML = '<div class="info-message">No recommendations available.</div>';
     return;
   }
 
-  //create container for page
   const container = document.createElement("div");
   container.className = "browse-container";
-
-  //render movie tiles for current page
   const grid = renderMovieTiles(pageMovies);
   container.appendChild(grid);
 
-  //add pagination controls if multiple pages exist
-  const totalPages = Math.ceil(allRecommendations.length / PAGE_SIZE);
+  const totalPages = Math.ceil(allRecommendations.length / REC_PAGE_SIZE);
   if (totalPages > 1) {
     const controls = document.createElement("div");
     controls.className = "pagination-controls";
 
-    //create previous button
-    const prevBtn = document.createElement("button");
-    prevBtn.className = "pagination-btn";
-    prevBtn.textContent = "← Previous";
-    prevBtn.disabled = currentPage === 0;
-    prevBtn.onclick = () => {
-      if (currentPage > 0) {
-        currentPage--;
-        renderPage();
+    const prev = document.createElement("button");
+    prev.className = "pagination-btn";
+    prev.textContent = "← Previous";
+    prev.disabled = recCurrentPage === 0;
+    prev.onclick = () => {
+      if (recCurrentPage > 0) {
+        recCurrentPage--;
+        renderRecsPage();
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     };
 
-    //create next button
-    const nextBtn = document.createElement("button");
-    nextBtn.className = "pagination-btn";
-    nextBtn.textContent = "Next →";
-    nextBtn.disabled = endIdx >= allRecommendations.length;
-    nextBtn.onclick = () => {
+    const next = document.createElement("button");
+    next.className = "pagination-btn";
+    next.textContent = "Next →";
+    next.disabled = endIdx >= allRecommendations.length;
+    next.onclick = () => {
       if (endIdx < allRecommendations.length) {
-        currentPage++;
-        renderPage();
+        recCurrentPage++;
+        renderRecsPage();
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     };
 
-    controls.appendChild(prevBtn);
-    controls.appendChild(nextBtn);
+    controls.appendChild(prev);
+    controls.appendChild(next);
     container.appendChild(controls);
   }
 
-  //render page to DOM
   outputDiv.innerHTML = "";
   outputDiv.appendChild(container);
 }
 
-//initialize browse page
-async function init() {
-  //set up login UI
-  initLoginUI();
+async function loadRecommendations() {
+  mode = "recs";
+  pager.style.display = "none";
+  metaSpan.textContent = "";
+  outputDiv.innerHTML = '<div class="loading">Loading recommendations...</div>';
 
-  //check if user is logged in
-  const username = await checkSession();
-  if (username) {
-    //show logged in state and load recommendations
-    renderLoggedIn(username);
-    await loadRecommendations();
-  } else {
-    //show logged out state
-    renderLoggedOut();
-    outputDiv.innerHTML =
-      '<p>Please <a href="/">login</a> to see recommendations.</p>';
+  const recs = await loadAllRecommendations();
+  if (recs.length === 0) {
+    outputDiv.innerHTML = '<div class="info-message">No recommendations available. Try rating some movies first!</div>';
+    return;
+  }
+  allRecommendations = recs;
+  recCurrentPage = 0;
+  renderRecsPage();
+}
+
+// ---------------- New catalog (filter/sort) flow ----------------
+function renderCatalog(items, page, total) {
+  const container = document.createElement("div");
+  container.className = "browse-container";
+
+  // Simple neutral cards (don’t rely on renderMovieTiles format)
+  const grid = document.createElement("div");
+  grid.style.display = "grid";
+  grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
+  grid.style.gap = "1rem";
+
+  for (const m of items) {
+    const card = document.createElement("div");
+    card.style.background = "#0b1220";
+    card.style.border = "1px solid #1f2937";
+    card.style.borderRadius = "12px";
+    card.style.padding = ".75rem";
+    card.style.color = "#e2e8f0";
+    card.innerHTML = `
+      <div style="font-weight:600;">${m.title ?? "(untitled)"}${m.year ? " ("+m.year+")" : ""}</div>
+      <div style="color:#94a3b8;">${m.genres ?? ""}</div>
+      <div style="color:#94a3b8;">Avg ★ ${(m.avg_rating ?? 0).toFixed(2)}</div>
+    `;
+    grid.appendChild(card);
   }
 
-  //set up navigation handlers
+  container.appendChild(grid);
+  outputDiv.innerHTML = "";
+  outputDiv.appendChild(container);
+
+  metaSpan.textContent = `Total: ${total}`;
+  pageInfo.textContent = `Page ${page}`;
+  pager.style.display = "flex";
+}
+
+async function loadCatalogPage() {
+  mode = "catalog";
+  outputDiv.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await fetchMoviesPage();
+    renderCatalog(data.items || [], data.page || 1, data.total || 0);
+    prevBtn.disabled = !(data.has_prev);
+    nextBtn.disabled = !(data.has_next);
+  } catch (e) {
+    console.error(e);
+    outputDiv.innerHTML = `<div class="error-message">Failed: ${e.message}</div>`;
+  }
+}
+
+// ---------------- init ----------------
+async function init() {
+  initLoginUI();
+
+  const username = await checkSession();
+  if (username) {
+    renderLoggedIn(username);
+    // load genres for the new controls
+    await fetchGenres();
+    // default view = your existing recommendations
+    await loadRecommendations();
+  } else {
+    renderLoggedOut();
+    outputDiv.innerHTML = '<p>Please <a href="/">login</a> to see recommendations.</p>';
+  }
+
   setupNavigation();
 
-  //initialize search functionality
+  // wire search (unchanged)
   const searchInput = document.getElementById("search_input");
   const searchButton = document.getElementById("search_button");
   if (searchInput && searchButton) {
     initSearch(searchInput, searchButton, outputDiv);
   }
 
-  //reload recommendations after login
-  window.addEventListener("userLoggedIn", loadRecommendations);
+  // controls: apply → switch to catalog
+  applyBtn?.addEventListener("click", () => {
+    state.genre = genreSelect.value;
+    state.sort  = sortSelect.value;
+    state.dir   = dirSelect.value;
+    state.page  = 1;
+    loadCatalogPage();
+  });
+
+  // controls: reset → back to recommendations
+  resetBtn?.addEventListener("click", () => {
+    genreSelect.value = "";
+    sortSelect.value  = "title";
+    dirSelect.value   = "asc";
+    state.genre = "";
+    state.sort  = "title";
+    state.dir   = "asc";
+    state.page  = 1;
+    pager.style.display = "none";
+    metaSpan.textContent = "";
+    loadRecommendations();
+  });
+
+  // pager
+  prevBtn?.addEventListener("click", () => {
+    if (mode !== "catalog") return;
+    if (state.page > 1) {
+      state.page -= 1;
+      loadCatalogPage();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+  nextBtn?.addEventListener("click", () => {
+    if (mode !== "catalog") return;
+    state.page += 1;
+    loadCatalogPage();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // in case user logs in from another tab and fires this event
+  window.addEventListener("userLoggedIn", async () => {
+    await fetchGenres();
+    await loadRecommendations();
+  });
 }
 
 init();

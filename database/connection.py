@@ -15,6 +15,10 @@ load_dotenv()
 
 #check for postgres connection string in environment
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+# psycopg2 does NOT accept the SQLAlchemy-style scheme with "+psycopg2"
+# e.g., "postgresql+psycopg2://user:pass@host:5432/db"
+if DATABASE_URL.startswith("postgresql+psycopg2://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL.split("postgresql+psycopg2://", 1)[1]
 
 #default sqlite database path if no postgres URL provided
 DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).resolve().parent / "movies.db"))

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Log in</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { background:#0f172a; color:#e2e8f0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+      .wrap { max-width:440px; margin:3rem auto; padding:1.25rem; background:#0b1220; border-radius:12px; }
+      label { display:block; margin:.5rem 0 .25rem; font-weight:600; }
+      input { width:100%; padding:.6rem; border-radius:8px; border:1px solid #334155; background:#0b1220; color:#e2e8f0; }
+      button { margin-top:1rem; padding:.6rem .9rem; border:0; border-radius:8px; background:#2563eb; color:white; cursor:pointer; }
+      a { color:#93c5fd; }
+      ul { padding-left:1.2rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h2>Log in</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul>
+            {% for category, message in messages %}
+              <li style="color: {{ 'salmon' if category=='error' else '#22c55e' }}">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('api_bp.auth_login') }}">
+        <label>Username</label>
+        <input type="text" name="username" required />
+
+        <label>Password</label>
+        <input type="password" name="password" required />
+
+        <button type="submit">Log in</button>
+      </form>
+
+      <p style="margin-top:1rem;">New here?
+        <a href="{{ url_for('api_bp.auth_signup') }}">Create an account</a>
+      </p>
+      <p style="margin-top:1rem;"><a href="{{ url_for('index') }}">&larr; Back to Home</a></p>
+    </div>
+  </body>
+</html>
