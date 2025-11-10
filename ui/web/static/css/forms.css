@@ -1,0 +1,148 @@
+.login-form input[type="text"],
+#search_input {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #16242f;
+  background: #0c141b;
+  color: var(--text);
+  outline: none;
+}
+
+.login-form input[type="text"] {
+  width: 160px;
+}
+
+#search_input {
+  width: 220px;
+}
+
+#search_input:focus {
+  border-color: var(--accent);
+}
+
+.login-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.login-status {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Add rating box */
+.add-rating-box {
+  display: none;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: var(--panel);
+  border-radius: 4px;
+  border: 1px solid #142433;
+}
+
+.add-rating-box.visible {
+  display: flex;
+}
+
+.add-rating-box input[type="text"],
+.add-rating-box input[type="number"] {
+  padding: 8px 10px;
+  border: 1px solid #16242f;
+  background: #0c141b;
+  color: var(--text);
+  border-radius: 4px;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+.add-rating-box input[type="text"] {
+  width: 200px;
+}
+
+.add-rating-box input[type="number"] {
+  width: 80px;
+}
+
+.add-rating-box input:focus {
+  border-color: var(--accent);
+}
+
+.add-rating-box button {
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: all 120ms ease;
+}
+
+#add_rating_submit {
+  background: var(--accent);
+  color: #021019;
+}
+
+#add_rating_submit:hover {
+  background: var(--accent-2);
+}
+
+#add_rating_cancel {
+  background: transparent;
+  color: var(--muted);
+  border-color: #16242f;
+}
+
+#add_rating_cancel:hover {
+  background: #0c1a2a;
+  color: var(--text);
+}
+
+/* Autocomplete dropdown */
+.autocomplete-container {
+  position: relative;
+  display: inline-block;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border: 1px solid #142433;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 100;
+  display: none;
+}
+
+.autocomplete-dropdown.visible {
+  display: block;
+}
+
+.autocomplete-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.9rem;
+  transition: background 120ms ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: #0c1a2a;
+}
+
+.autocomplete-item-title {
+  font-weight: 600;
+}
+
+.autocomplete-item-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}

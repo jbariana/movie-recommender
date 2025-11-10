@@ -73,65 +73,105 @@ def logout():
 # ------------------------------
 @api_bp.route("/auth/signup", methods=["GET", "POST"])
 def auth_signup():
+    """signup page and handler"""
     if request.method == "GET":
         return render_template("signup.html")
 
-    username = (request.form.get("username") or "").strip()
-    password = request.form.get("password") or ""
+    #handle form submission (not JSON)
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
 
     if not username or not password:
-        flash("Username and password are required.", "error")
-        return render_template("signup.html"), 400
+        flash("username and password required", "error")
+        return redirect(url_for("api_bp.auth_signup"))
 
-    if len(password) < 4:
-        flash("Use a simple demo password (>=4 chars). Do NOT use a real password.", "error")
-        return render_template("signup.html"), 400
-
+    #check if user already exists
     existing = get_user_by_username(username)
     if existing:
-        flash("Username already exists. Please log in.", "error")
-        return redirect(url_for("api_bp.auth_login"))
+        flash("username already taken", "error")
+        return redirect(url_for("api_bp.auth_signup"))
 
+    #create user with hashed password
+    from werkzeug.security import generate_password_hash
+    pw_hash = generate_password_hash(password)
+    
     try:
-        pw_hash = generate_password_hash(password)
         user_id = create_user(username, pw_hash)
+        
+        #IMPORTANT: log them in by setting session
+        session["username"] = username
+        session.permanent = True
+        
+        #sync to user_profile.json
+        from database.db_query import get_ratings_for_user
+        ratings = get_ratings_for_user(user_id)
+        profile_json = {"username": username, "user_id": user_id, "ratings": ratings}
+        PROFILE_PATH.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
+        
+        flash("account created successfully!", "success")
+        
+        #redirect to home page (user is now logged in)
+        return redirect(url_for("index"))
+        
     except Exception as ex:
-        logger.exception("Signup failed")
-        flash(f"Signup failed: {ex}", "error")
-        return render_template("signup.html"), 500
-
-    session["username"] = username
-    session.permanent = True
-    flash("Account created. You are now logged in.", "success")
-    return redirect(url_for("index"))
+        logger.exception("signup failed")
+        flash(f"error creating account: {ex}", "error")
+        return redirect(url_for("api_bp.auth_signup"))
 
 
 @api_bp.route("/auth/login", methods=["GET", "POST"])
 def auth_login():
+    """login page and handler"""
     if request.method == "GET":
         return render_template("login.html")
 
-    username = (request.form.get("username") or "").strip()
-    password = request.form.get("password") or ""
+    #handle both form data (from HTML form) and JSON (from JS fetch)
+    if request.is_json:
+        payload = request.get_json()
+        username = payload.get("username", "").strip()
+        password = payload.get("password", "").strip()
+    else:
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
 
     if not username or not password:
-        flash("Username and password are required.", "error")
-        return render_template("login.html"), 400
+        if request.is_json:
+            return jsonify({"error": "username and password required"}), 400
+        flash("username and password required", "error")
+        return redirect(url_for("api_bp.auth_login"))
 
+    #get user from database
     user = get_user_by_username(username)
     if not user:
-        flash("User not found. Please sign up.", "error")
-        return redirect(url_for("api_bp.auth_signup"))
+        if request.is_json:
+            return jsonify({"error": "invalid credentials"}), 401
+        flash("invalid username or password", "error")
+        return redirect(url_for("api_bp.auth_login"))
 
-    # Expected tuple order from your users module: (user_id, username, password_hash)
-    user_id, uname, pw_hash = user
-    if not pw_hash or not check_password_hash(pw_hash, password):
-        flash("Invalid credentials.", "error")
-        return render_template("login.html"), 401
+    user_id, stored_username, stored_hash = user
+    
+    #check password
+    from werkzeug.security import check_password_hash
+    if not check_password_hash(stored_hash, password):
+        if request.is_json:
+            return jsonify({"error": "invalid credentials"}), 401
+        flash("invalid username or password", "error")
+        return redirect(url_for("api_bp.auth_login"))
 
-    session["username"] = uname
+    #login successful
+    session["username"] = stored_username
     session.permanent = True
-    flash("Logged in.", "success")
+
+    #sync to user_profile.json
+    from database.db_query import get_ratings_for_user
+    ratings = get_ratings_for_user(user_id)
+    profile_json = {"username": stored_username, "user_id": user_id, "ratings": ratings}
+    PROFILE_PATH.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
+
+    if request.is_json:
+        return jsonify({"message": "logged in", "username": stored_username}), 200
+    
+    flash("logged in successfully!", "success")
     return redirect(url_for("index"))
 
 

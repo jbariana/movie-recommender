@@ -1,0 +1,84 @@
+.header {
+  background: var(--panel);
+  border-bottom: 1px solid #0b1420;
+  padding: 14px 0;
+}
+
+.header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.nav-left,
+.nav-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-tab {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 120ms ease;
+  text-decoration: none;
+}
+
+.nav-tab:hover {
+  color: #fff;
+  background: #0c1a2a;
+}
+
+.nav-tab[aria-current="page"],
+.nav-tab.active {
+  background: var(--card);
+  color: var(--accent);
+  border-color: #142433;
+}
+
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.auth-links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
