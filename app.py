@@ -55,6 +55,9 @@ init()
 
 from api.routes import api_bp
 app.register_blueprint(api_bp)
+for rule in app.url_map.iter_rules():
+    print("ROUTE:", rule.endpoint, "->", rule.rule)
+
 
 @app.route("/")
 def index():

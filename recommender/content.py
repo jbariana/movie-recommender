@@ -5,9 +5,11 @@ import numpy as np
 import pandas as pd
 
 from recommender.data_loader import load_movies_df, load_ratings_df
+from recommender.cache import get as cache_get, set as cache_set
 from database.connection import get_db
-from database.paramstyle import ph_list
+from database.paramstyle import ph_list, PH
 from database.db_query import top_unseen_for_user
+
 
 # ----------------------------
 # Feature building (genres + year)
@@ -37,11 +39,11 @@ def _build_item_features() -> tuple[pd.DataFrame, np.ndarray, dict[int, int]]:
     yr_std = year.std(skipna=True) or 1.0
     meta["year_z"] = ((year.fillna(yr_mean) - yr_mean) / yr_std).astype(float)
 
-    # Assemble feature matrix: [genres..., year_z]
+    # Feature matrix: [genres..., year_z]
     feat_cols = [c for c in meta.columns if c.startswith("g::")] + ["year_z"]
     X = meta[feat_cols].to_numpy(dtype=float)
 
-    # L2 normalize item feature rows to make cosine easy later
+    # L2 normalize rows (cosine similarity friendly)
     norms = np.linalg.norm(X, axis=1, keepdims=True) + 1e-9
     X = X / norms
 
@@ -49,7 +51,7 @@ def _build_item_features() -> tuple[pd.DataFrame, np.ndarray, dict[int, int]]:
     return meta[["movie_id", "title", "year", "genres"]], X, id2row
 
 
-def _user_profile_vector(user_id: int, X: np.ndarray, id2row: dict[int, int]) -> tuple[np.ndarray, list[int]]:
+def _user_profile_vector(user_id: int, X: np.ndarray, id2row: dict[int, int]) -> tuple[np.ndarray | None, list[int]]:
     """
     Build a user profile as a weighted average of the features of items they've rated.
     Returns (uvec, seen_movie_ids). If user has no ratings, returns (None, []).
@@ -59,14 +61,13 @@ def _user_profile_vector(user_id: int, X: np.ndarray, id2row: dict[int, int]) ->
     if u.empty:
         return None, []
 
-    # Keep only items present in our feature space
-    rows = []
-    weights = []
+    rows: list[int] = []
+    weights: list[float] = []
     for _, r in u.iterrows():
         mid = int(r["movie_id"])
         if mid in id2row:
             rows.append(id2row[mid])
-            # Weight by normalized rating (0..1); you can also use (rating - mean) for mean-centering
+            # Weight by normalized rating (0..1)
             weights.append(float(r["rating"]) / 5.0)
 
     if not rows:
@@ -79,6 +80,18 @@ def _user_profile_vector(user_id: int, X: np.ndarray, id2row: dict[int, int]) ->
     uvec = uvec / u_norm
     seen = [int(x) for x in u["movie_id"].tolist()]
     return uvec, seen
+
+
+def _latest_user_rating_ts(user_id: int) -> int:
+    """
+    Latest rating timestamp for this user (0 if none).
+    Used to version the cache so it auto-invalidates when the user rates.
+    """
+    with get_db(readonly=True) as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT COALESCE(MAX(timestamp), 0) FROM ratings WHERE user_id = {PH};", (user_id,))
+        row = cur.fetchone()
+        return int(row[0] or 0)
 
 
 # ----------------------------
@@ -123,10 +136,19 @@ def recommend_titles_for_user(user_id: int, k: int = 20) -> List[Dict]:
     """
     Same as recommend_for_user, but returns movie metadata for convenience:
     [{movie_id, title, score, year, genres, poster_url}]
+    Uses a file cache keyed by (user_id, 'content_k{k}') and invalidated by latest rating ts.
     """
+    version_ts = _latest_user_rating_ts(user_id)
+    cache_key = f"content_k{k}"
+
+    cached = cache_get(user_id, cache_key, version_ts, ttl_seconds=3600)
+    if cached is not None:
+        return cached
+
     recs = recommend_for_user(user_id=user_id, k=k)
     mids = [mid for mid, _ in recs]
     if not mids:
+        cache_set(user_id, cache_key, version_ts, [])
         return []
 
     with get_db(readonly=True) as conn:
@@ -162,4 +184,6 @@ def recommend_titles_for_user(user_id: int, k: int = 20) -> List[Dict]:
                 "genres": info["genres"],
             }
         )
+
+    cache_set(user_id, cache_key, version_ts, out)
     return out
