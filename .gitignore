@@ -1,42 +1,53 @@
-# Python caches
+# --- Python caches
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
 
-# Virtual env
+# --- Virtual envs
 .venv/
+venv/
+.env/           # virtualenv-style dirs sometimes named .env
 
-# Local DB artifact
-database/movies.db
+# --- Local env files
+.env
+.env.*
+.envrc
+.python-version   # pyenv
 
-# OS/editor cruft
+# --- Local DB artifacts
+*.db
+*.sqlite
+*.sqlite3
+database/*.db
+
+# --- Flask instance (runtime secrets/uploads)
+instance/
+
+# --- OS / editors
 .DS_Store
-.ipynb_checkpoints/
-.pytest_cache/
-
-# macOS Finder
-.DS_Store
-
-# VS Code workspace settings (if you customize locally)
+.idea/
 .vscode/
 
-# Python packaging & build caches (future-proof)
+# --- Testing / coverage / logs
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.log
+
+# --- Packaging / builds
 build/
 dist/
 *.egg-info/
 
-# Logs & coverage (if you add tests later)
-*.log
-.coverage
-htmlcov/
-
-# Jupyter checkpoints (if you ever use notebooks)
+# --- Jupyter
 .ipynb_checkpoints/
 
-# Data archives (keep CSVs, ignore zips)
+# --- Data
+# Keep your own small CSVs, but ignore bulky archives and the MovieLens dump
 data/*.zip
+data/ml-latest-small/
+# (If you want the folder in Git but empty, add a data/.gitkeep)
 
-# local env
-.env
-
-# local profile runtime file
+# --- App runtime profile (local-only)
 user_profile/user_profile.json
