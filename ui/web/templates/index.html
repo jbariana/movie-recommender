@@ -39,48 +39,54 @@
             </div>
 
             {% if session.get('username') %}
-              <!-- Logged in: show user + Logout (hashed-auth flow) -->
-              <form method="POST" action="{{ url_for('api_bp.auth_logout') }}" class="login-form" style="margin-left:.75rem;">
-                <small class="login-status">Logged in as <b>{{ session['username'] }}</b></small>
-                <button type="submit" style="margin-left:.5rem;">Logout</button>
-              </form>
+            <form
+              method="POST"
+              action="{{ url_for('api_bp.auth_logout') }}"
+              class="login-form"
+              style="margin-left: 0.75rem"
+            >
+              <small class="login-status"
+                >Logged in as <b>{{ session['username'] }}</b></small
+              >
+              <button type="submit" style="margin-left: 0.5rem">Logout</button>
+            </form>
             {% else %}
-              <!-- Logged out: links to new auth pages -->
-              <div class="auth-links" style="margin-left:.75rem;">
-                <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
-                <span aria-hidden="true"> · </span>
-                <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
-              </div>
+            <div class="auth-links" style="margin-left: 0.75rem">
+              <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
+              <span aria-hidden="true"> · </span>
+              <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
+            </div>
             {% endif %}
           </div>
         </nav>
       </div>
     </header>
 
-    <!-- Flash messages (success/errors from signup/login) -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <ul style="margin:1rem; list-style:disc;">
-          {% for category, message in messages %}
-            <li style="color: {{ 'salmon' if category=='error' else '#22c55e' }}">{{ message }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+    {% with messages = get_flashed_messages(with_categories=true) %} {% if
+    messages %}
+    <ul style="margin: 1rem; list-style: disc; padding-left: 2rem">
+      {% for category, message in messages %}
+      <li
+        class="flash-message {% if category == 'error' %}flash-error{% else %}flash-success{% endif %}"
+      >
+        {{ message }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %} {% endwith %}
 
     <main class="container">
+      {% if session.get('username') %}
       <div class="top-row">
         <div class="user section">
-          <h2>Current User</h2>
+          <h2>My Profile</h2>
           <div class="user-controls">
             <button id="view_statistics_button">View Statistics</button>
-            <button id="check_session_button">Check Session</button>
-            <p id="session_status" class="small-muted"></p>
           </div>
         </div>
 
         <div class="action section">
-          <h2>Actions</h2>
+          <h2>Quick Actions</h2>
           <div class="action-controls">
             <button id="add_rating_button">Add Rating</button>
             <div
@@ -92,6 +98,23 @@
           </div>
         </div>
       </div>
+      {% else %}
+      <div class="welcome-section">
+        <h2>Welcome to Movie Recommender</h2>
+        <p>
+          Discover movies tailored to your taste. Sign up or log in to get
+          started.
+        </p>
+        <div style="margin-top: 1rem">
+          <a href="{{ url_for('api_bp.auth_signup') }}" class="btn-primary"
+            >Sign Up</a
+          >
+          <a href="{{ url_for('api_bp.auth_login') }}" class="btn-secondary"
+            >Log In</a
+          >
+        </div>
+      </div>
+      {% endif %}
 
       <section
         id="output"

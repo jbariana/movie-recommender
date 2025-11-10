@@ -10,7 +10,6 @@
     />
   </head>
   <body>
-    <!-- Header / Nav (same pattern as index) -->
     <header class="header">
       <div class="header-inner">
         <h1>Movie Recommender</h1>
@@ -19,26 +18,42 @@
           <div class="nav-left">
             <a href="{{ url_for('index') }}" class="nav-tab">Home</a>
             <button class="nav-tab" id="view_ratings_button">Profile</button>
-            <a href="{{ url_for('browse_page') }}" class="nav-tab" aria-current="page">Browse</a>
+            <a
+              href="{{ url_for('browse_page') }}"
+              class="nav-tab"
+              aria-current="page"
+              >Browse</a
+            >
           </div>
 
           <div class="nav-right">
             <div class="nav-search">
-              <input id="search_input" type="text" placeholder="Search movies" />
+              <input
+                id="search_input"
+                type="text"
+                placeholder="Search movies"
+              />
               <button id="search_button" type="button">Search</button>
             </div>
 
             {% if session.get('username') %}
-              <form method="POST" action="{{ url_for('api_bp.auth_logout') }}" class="login-form" style="margin-left:.75rem;">
-                <small class="login-status">Logged in as <b>{{ session['username'] }}</b></small>
-                <button type="submit" style="margin-left:.5rem;">Logout</button>
-              </form>
+            <form
+              method="POST"
+              action="{{ url_for('api_bp.auth_logout') }}"
+              class="login-form"
+              style="margin-left: 0.75rem"
+            >
+              <small class="login-status"
+                >Logged in as <b>{{ session['username'] }}</b></small
+              >
+              <button type="submit" style="margin-left: 0.5rem">Logout</button>
+            </form>
             {% else %}
-              <div class="auth-links" style="margin-left:.75rem;">
-                <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
-                <span aria-hidden="true"> · </span>
-                <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
-              </div>
+            <div class="auth-links" style="margin-left: 0.75rem">
+              <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
+              <span aria-hidden="true"> · </span>
+              <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
+            </div>
             {% endif %}
           </div>
         </nav>
@@ -46,15 +61,42 @@
     </header>
 
     <main class="container">
-      <!-- Filter/Sort controls used by browse.js (catalog mode) -->
-      <div id="browseControls" class="controls" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:1rem 0;">
-        <label>Genre:
+      {% if not session.get('username') %}
+      <!-- Show login prompt if not logged in -->
+      <div class="welcome-section">
+        <h2>Browse Recommendations</h2>
+        <p>Please log in to see personalized movie recommendations.</p>
+        <div style="margin-top: 1rem">
+          <a href="{{ url_for('api_bp.auth_login') }}" class="btn-primary"
+            >Log In</a
+          >
+          <a href="{{ url_for('api_bp.auth_signup') }}" class="btn-secondary"
+            >Sign Up</a
+          >
+        </div>
+      </div>
+      {% else %}
+      <!-- Filter/Sort controls (optional catalog mode) -->
+      <div
+        id="browseControls"
+        class="controls"
+        style="
+          display: none;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          align-items: center;
+          margin: 1rem 0;
+        "
+      >
+        <label
+          >Genre:
           <select id="genreSelect">
             <option value="">Any</option>
           </select>
         </label>
 
-        <label>Sort:
+        <label
+          >Sort:
           <select id="sortSelect">
             <option value="title">Title</option>
             <option value="year">Year</option>
@@ -62,7 +104,8 @@
           </select>
         </label>
 
-        <label>Dir:
+        <label
+          >Dir:
           <select id="dirSelect">
             <option value="asc">Asc</option>
             <option value="desc">Desc</option>
@@ -72,22 +115,41 @@
         <button id="applyFiltersBtn" type="button">Apply</button>
         <button id="resetFiltersBtn" type="button">Reset</button>
 
-        <span id="browseMeta" style="margin-left:.75rem;color:#94a3b8;"></span>
+        <span
+          id="browseMeta"
+          style="margin-left: 0.75rem; color: #94a3b8"
+        ></span>
       </div>
 
       <!-- Pager (only visible in catalog mode) -->
-      <div id="browsePager" class="pager" style="display:none;gap:.5rem;margin:.5rem 0;align-items:center;">
+      <div
+        id="browsePager"
+        class="pager"
+        style="
+          display: none;
+          gap: 0.5rem;
+          margin: 0.5rem 0;
+          align-items: center;
+        "
+      >
         <button id="prevBtn" type="button">Prev</button>
-        <span id="pageInfo" style="color:#94a3b8;"></span>
+        <span id="pageInfo" style="color: #94a3b8"></span>
         <button id="nextBtn" type="button">Next</button>
       </div>
 
-      <!-- Output region:
-           - recommendations grid (your original behavior)
-           - OR catalog cards when filters are applied -->
-      <section id="output" class="output" role="region" aria-live="polite"></section>
+      <!-- Output region for recommendations -->
+      <section
+        id="output"
+        class="output"
+        role="region"
+        aria-live="polite"
+      ></section>
+      {% endif %}
     </main>
 
-    <script type="module" src="{{ url_for('static', filename='js/browse.js') }}"></script>
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/browse.js') }}"
+    ></script>
   </body>
 </html>
