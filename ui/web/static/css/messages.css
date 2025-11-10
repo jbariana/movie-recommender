@@ -1,0 +1,40 @@
+/* Flash messages */
+.flash-message {
+  margin: 0.5rem 0;
+}
+
+.flash-error {
+  color: #ef4444;
+}
+
+.flash-success {
+  color: #22c55e;
+}
+
+.success-message {
+  background: var(--accent);
+  color: #021019;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.info-message,
+.error-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.error-message {
+  color: #ff8b8b;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 1rem;
+}

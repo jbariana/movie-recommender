@@ -76,27 +76,17 @@
         </div>
       </div>
       {% else %}
-      <!-- Filter/Sort controls (optional catalog mode) -->
-      <div
-        id="browseControls"
-        class="controls"
-        style="
-          display: none;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          align-items: center;
-          margin: 1rem 0;
-        "
-      >
-        <label
-          >Genre:
+      <!-- Filter/Sort controls -->
+      <div id="browseControls" class="browse-controls">
+        <label>
+          Genre:
           <select id="genreSelect">
             <option value="">Any</option>
           </select>
         </label>
 
-        <label
-          >Sort:
+        <label>
+          Sort:
           <select id="sortSelect">
             <option value="title">Title</option>
             <option value="year">Year</option>
@@ -104,8 +94,8 @@
           </select>
         </label>
 
-        <label
-          >Dir:
+        <label>
+          Dir:
           <select id="dirSelect">
             <option value="asc">Asc</option>
             <option value="desc">Desc</option>
@@ -115,25 +105,13 @@
         <button id="applyFiltersBtn" type="button">Apply</button>
         <button id="resetFiltersBtn" type="button">Reset</button>
 
-        <span
-          id="browseMeta"
-          style="margin-left: 0.75rem; color: #94a3b8"
-        ></span>
+        <span id="browseMeta" class="browse-meta"></span>
       </div>
 
-      <!-- Pager (only visible in catalog mode) -->
-      <div
-        id="browsePager"
-        class="pager"
-        style="
-          display: none;
-          gap: 0.5rem;
-          margin: 0.5rem 0;
-          align-items: center;
-        "
-      >
+      <!-- Pager -->
+      <div id="browsePager" class="browse-pager">
         <button id="prevBtn" type="button">Prev</button>
-        <span id="pageInfo" style="color: #94a3b8"></span>
+        <span id="pageInfo" class="page-info"></span>
         <button id="nextBtn" type="button">Next</button>
       </div>
 
