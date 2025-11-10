@@ -286,3 +286,44 @@ def api_stats():
     stats = get_user_rating_stats(user_id)
     return jsonify(stats), 200
 
+# ---------- RECS: content-based (genres + year) ----------
+@api_bp.get("/api/recommendations/content")
+def api_content_recs():
+    """
+    Content-based recommendations for the current user (or a provided user_id).
+    Query params:
+      user_id: optional int; if omitted, use the logged-in session user
+      k:       optional int; default 20
+    """
+    from recommender.content import recommend_titles_for_user
+    from database.users import get_user_by_username
+
+    # resolve user_id
+    user_id_param = request.args.get("user_id")
+    k = int(request.args.get("k") or 20)
+
+    if user_id_param:
+        try:
+            user_id = int(user_id_param)
+        except ValueError:
+            return jsonify({"error": "invalid_user_id"}), 400
+    else:
+        uname = session.get("username")
+        if not uname:
+            return jsonify({"error": "not_logged_in"}), 401
+        user_row = get_user_by_username(uname)
+        if not user_row:
+            return jsonify({"error": "user_not_found"}), 404
+        try:
+            user_id = int(user_row[0])  # (id, username, hash)
+        except Exception:
+            # fallback dict-like
+            for kname in ("user_id", "id", "USER_ID", "ID"):
+                if kname in user_row:
+                    user_id = int(user_row[kname])
+                    break
+            else:
+                return jsonify({"error": "could_not_resolve_user_id"}), 500
+
+    items = recommend_titles_for_user(user_id=user_id, k=k)
+    return jsonify({"user_id": user_id, "items": items}), 200

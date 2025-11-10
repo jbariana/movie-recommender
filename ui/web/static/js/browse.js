@@ -33,6 +33,7 @@ const pager       = document.getElementById("browsePager");
 const prevBtn     = document.getElementById("prevBtn");
 const nextBtn     = document.getElementById("nextBtn");
 const pageInfo    = document.getElementById("pageInfo");
+const getRecsBtn  = document.getElementById("getRecsBtn");
 
 let mode = "recs"; // "recs" | "catalog"
 const state = {
@@ -46,7 +47,7 @@ const state = {
 
 function toQuery(o) {
   const p = new URLSearchParams();
-  for (const [k,v] of Object.entries(o)) {
+  for (const [k, v] of Object.entries(o)) {
     if (v !== "" && v != null) p.set(k, v);
   }
   return p.toString();
@@ -159,6 +160,83 @@ function renderRecsPage() {
   outputDiv.appendChild(container);
 }
 
+// ---- New: content-based recs via /api/recommendations/content ----
+function renderContentRecs(items) {
+  // Simple neutral cards (don’t rely on renderMovieTiles)
+  const container = document.createElement("div");
+  container.className = "browse-container";
+
+  const grid = document.createElement("div");
+  grid.style.display = "grid";
+  grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
+  grid.style.gap = "1rem";
+
+  for (const m of items) {
+    const card = document.createElement("div");
+    card.style.background = "#0b1220";
+    card.style.border = "1px solid #1f2937";
+    card.style.borderRadius = "12px";
+    card.style.padding = ".75rem";
+    card.style.color = "#e2e8f0";
+
+    // If score <= 1 → cosine similarity; else → weighted average rating (cold start)
+    const isSimilarity = typeof m.score === "number" && m.score <= 1.0001;
+    const metricLabel  = isSimilarity ? "Similarity" : "Weighted rating";
+    const metricValue  = (m.score ?? 0).toFixed(3);
+
+    card.innerHTML = `
+      <div style="font-weight:600;">
+        ${m.title ?? "(untitled)"}${m.year ? " (" + m.year + ")" : ""}
+      </div>
+      <div style="color:#94a3b8;">${m.genres ?? ""}</div>
+      <div style="color:#94a3b8;">${metricLabel}: ${metricValue}</div>
+    `;
+
+    // Make the card clickable to rate
+    card.style.cursor = "pointer";
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.addEventListener("click", () => {
+      try { showRatingModal(m.movie_id, m.title); } catch {}
+    });
+    card.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        try { showRatingModal(m.movie_id, m.title); } catch {}
+      }
+    });
+
+    grid.appendChild(card);
+  }
+
+  container.appendChild(grid);
+  outputDiv.innerHTML = "";
+  outputDiv.appendChild(container);
+  metaSpan.textContent = `Personalized picks: ${items.length}`;
+  pager.style.display = "none";
+}
+
+async function loadContentRecs(k = 12) {
+  mode = "recs";
+  pager.style.display = "none";
+  metaSpan.textContent = "";
+  outputDiv.innerHTML = '<div class="loading">Finding picks for you…</div>';
+
+  try {
+    const r = await fetch(`/api/recommendations/content?k=${k}`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (data.error) {
+      outputDiv.innerHTML = `<div class="info-message">${data.error}</div>`;
+      return;
+    }
+    renderContentRecs(data.items || []);
+  } catch (e) {
+    console.error(e);
+    outputDiv.innerHTML = `<div class="error-message">Failed: ${e.message}</div>`;
+  }
+}
+
 async function loadRecommendations() {
   mode = "recs";
   pager.style.display = "none";
@@ -198,6 +276,21 @@ function renderCatalog(items, page, total) {
       <div style="color:#94a3b8;">${m.genres ?? ""}</div>
       <div style="color:#94a3b8;">Avg ★ ${(m.avg_rating ?? 0).toFixed(2)}</div>
     `;
+
+    // Make the card clickable to rate
+    card.style.cursor = "pointer";
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.addEventListener("click", () => {
+      try { showRatingModal(m.movie_id, m.title); } catch {}
+    });
+    card.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        try { showRatingModal(m.movie_id, m.title); } catch {}
+      }
+    });
+
     grid.appendChild(card);
   }
 
@@ -286,6 +379,11 @@ async function init() {
     state.page += 1;
     loadCatalogPage();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // "Get Recommendations" button → call content-based endpoint
+  getRecsBtn?.addEventListener("click", () => {
+    loadContentRecs(12);
   });
 
   // in case user logs in from another tab and fires this event
