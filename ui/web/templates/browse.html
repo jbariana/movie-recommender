@@ -17,7 +17,7 @@
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
           <div class="nav-left">
             <a href="{{ url_for('index') }}" class="nav-tab">Home</a>
-            <button class="nav-tab" id="view_ratings_button">Profile</button>
+            <a href="{{ url_for('profile_page') }}" class="nav-tab">Profile</a>
             <a
               href="{{ url_for('browse_page') }}"
               class="nav-tab"

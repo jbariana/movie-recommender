@@ -64,5 +64,9 @@ def index():
 def browse_page():
     return render_template("browse.html")
 
+@app.route("/profile")
+def profile_page():
+    return render_template("profile.html")
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)

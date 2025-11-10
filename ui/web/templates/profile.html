@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Profile • Movie Recommender</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <h1>Movie Recommender</h1>
+
+        <nav class="nav-bar" role="navigation" aria-label="Main navigation">
+          <div class="nav-left">
+            <a href="{{ url_for('index') }}" class="nav-tab">Home</a>
+            <a
+              href="{{ url_for('profile_page') }}"
+              class="nav-tab"
+              aria-current="page"
+              >Profile</a
+            >
+            <a href="{{ url_for('browse_page') }}" class="nav-tab">Browse</a>
+          </div>
+
+          <div class="nav-right">
+            <div class="nav-search">
+              <input
+                id="search_input"
+                type="text"
+                placeholder="Search movies"
+              />
+              <button id="search_button" type="button">Search</button>
+            </div>
+
+            {% if session.get('username') %}
+            <form
+              method="POST"
+              action="{{ url_for('api_bp.auth_logout') }}"
+              class="login-form"
+              style="margin-left: 0.75rem"
+            >
+              <small class="login-status"
+                >Logged in as <b>{{ session['username'] }}</b></small
+              >
+              <button type="submit" style="margin-left: 0.5rem">Logout</button>
+            </form>
+            {% else %}
+            <div class="auth-links" style="margin-left: 0.75rem">
+              <a href="{{ url_for('api_bp.auth_login') }}">Log in</a>
+              <span aria-hidden="true"> · </span>
+              <a href="{{ url_for('api_bp.auth_signup') }}">Sign up</a>
+            </div>
+            {% endif %}
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      {% if not session.get('username') %}
+      <div class="welcome-section">
+        <h2>Profile</h2>
+        <p>Please log in to view your profile.</p>
+        <div style="margin-top: 1rem">
+          <a href="{{ url_for('api_bp.auth_login') }}" class="btn-primary"
+            >Log In</a
+          >
+          <a href="{{ url_for('api_bp.auth_signup') }}" class="btn-secondary"
+            >Sign Up</a
+          >
+        </div>
+      </div>
+      {% else %}
+      <div class="profile-container">
+        <!-- Profile Header -->
+        <div class="profile-header">
+          <div class="profile-avatar">{{ session['username'][0].upper() }}</div>
+          <div class="profile-info">
+            <h1 class="profile-username">{{ session['username'] }}</h1>
+            <div class="profile-stats">
+              <div class="stat-box">
+                <span class="stat-value" id="total-ratings">0</span>
+                <span class="stat-label">Ratings</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-value" id="avg-rating">0.0</span>
+                <span class="stat-label">Avg Rating</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-value" id="total-favorites">0</span>
+                <span class="stat-label">Favorites</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-value" id="total-watchlist">0</span>
+                <span class="stat-label">Watchlist</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="profile-tabs">
+          <button class="profile-tab active" data-tab="ratings">
+            My Ratings
+          </button>
+          <button class="profile-tab" data-tab="favorites">Favorites</button>
+          <button class="profile-tab" data-tab="watchlist">Watchlist</button>
+          <button class="profile-tab" data-tab="statistics">Statistics</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="profile-content">
+          <!-- Ratings Tab -->
+          <div class="profile-tab-content active" id="tab-ratings">
+            <div class="tab-header">
+              <h2>My Ratings</h2>
+              <button id="sort-ratings" class="btn-sort">Sort by Date ▼</button>
+            </div>
+            <div id="ratings-list" class="movie-list">
+              <p class="loading">Loading ratings...</p>
+            </div>
+          </div>
+
+          <!-- Favorites Tab -->
+          <div class="profile-tab-content" id="tab-favorites">
+            <div class="tab-header">
+              <h2>My Favorites</h2>
+              <p class="tab-description">Movies you've marked as favorites</p>
+            </div>
+            <div id="favorites-list" class="movie-grid">
+              <p class="info-message">
+                No favorites yet. Click the ♥ icon on any movie to add it!
+              </p>
+            </div>
+          </div>
+
+          <!-- Watchlist Tab -->
+          <div class="profile-tab-content" id="tab-watchlist">
+            <div class="tab-header">
+              <h2>My Watchlist</h2>
+              <p class="tab-description">Movies you want to watch later</p>
+            </div>
+            <div id="watchlist-list" class="movie-grid">
+              <p class="info-message">
+                No movies in watchlist. Click the 🔖 icon to add movies!
+              </p>
+            </div>
+          </div>
+
+          <!-- Statistics Tab -->
+          <div class="profile-tab-content" id="tab-statistics">
+            <div class="tab-header">
+              <h2>Statistics</h2>
+            </div>
+            <div id="statistics-content">
+              <p class="loading">Loading statistics...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </main>
+
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/profile.js') }}"
+    ></script>
+  </body>
+</html>

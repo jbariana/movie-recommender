@@ -262,52 +262,94 @@ def list_movies(
 # --- User rating stats ---
 def get_user_rating_stats(user_id: int) -> dict:
     """
-    Returns:
-      {
-        "total": int,                # number of ratings by this user
-        "avg": float | None,         # average rating (None if no ratings)
-        "by_genre": list[{"genre": str, "count": int, "avg": float}]
-      }
+    Return user rating statistics including top genres.
+    Works with both SQLite and PostgreSQL.
     """
-    from database.connection import get_db
-    from database.paramstyle import PH
-
+    from database.connection import get_db, DATABASE_URL
+    
+    is_postgres = DATABASE_URL and DATABASE_URL.startswith("postgres")
+    
     with get_db(readonly=True) as conn:
         cur = conn.cursor()
-        # total + avg
+        
+        # Basic stats (works for both databases)
         cur.execute(
-            f"SELECT COUNT(*), AVG(rating) FROM ratings WHERE user_id = {PH};",
-            (user_id,),
-        )
-        total, avg = cur.fetchone()
-
-        # per-genre breakdown (optional, nice to show)
-        cur.execute(
-            f"""
-            WITH ur AS (
-              SELECT r.movie_id, r.rating
-              FROM ratings r
-              WHERE r.user_id = {PH}
-            )
-            SELECT g.genre, COUNT(*), AVG(ur.rating)
-            FROM ur
-            JOIN movies m ON m.movie_id = ur.movie_id
-            CROSS JOIN LATERAL (
-              SELECT TRIM(value) AS genre
-              FROM json_each_text( ('["' || REPLACE(COALESCE(m.genres,''),'|','","') || '"]') )
-            ) g
-            GROUP BY g.genre
-            ORDER BY COUNT(*) DESC, g.genre ASC;
+            """
+            SELECT 
+                COUNT(*) as total_ratings,
+                AVG(rating) as average_rating
+            FROM ratings
+            WHERE user_id = %s
             """,
-            (user_id,),
+            (user_id,)
         )
-        by_genre = [
-            {"genre": g, "count": int(c or 0), "avg": float(a) if a is not None else None}
-            for g, c, a in cur.fetchall()
+        row = cur.fetchone()
+        total_ratings = row[0] if row else 0
+        average_rating = float(row[1]) if row and row[1] else 0.0
+        
+        # Top genres (different SQL for PostgreSQL vs SQLite)
+        if is_postgres:
+            # PostgreSQL version: use string_to_array and unnest
+            cur.execute(
+                """
+                WITH user_movies AS (
+                    SELECT m.genres
+                    FROM ratings r
+                    JOIN movies m ON m.movie_id = r.movie_id
+                    WHERE r.user_id = %s AND m.genres IS NOT NULL
+                ),
+                genre_splits AS (
+                    SELECT unnest(string_to_array(genres, '|')) as genre
+                    FROM user_movies
+                )
+                SELECT 
+                    genre,
+                    COUNT(*) as count
+                FROM genre_splits
+                WHERE genre IS NOT NULL AND genre != '' AND genre != '(no genres listed)'
+                GROUP BY genre
+                ORDER BY count DESC
+                LIMIT 5
+                """,
+                (user_id,)
+            )
+        else:
+            # SQLite version: use json_each
+            cur.execute(
+                """
+                WITH user_movies AS (
+                    SELECT m.genres
+                    FROM ratings r
+                    JOIN movies m ON m.movie_id = r.movie_id
+                    WHERE r.user_id = ? AND m.genres IS NOT NULL
+                ),
+                genre_splits AS (
+                    SELECT value as genre
+                    FROM user_movies,
+                         json_each('["' || REPLACE(COALESCE(genres, ''), '|', '","') || '"]')
+                )
+                SELECT 
+                    genre,
+                    COUNT(*) as count
+                FROM genre_splits
+                WHERE genre IS NOT NULL 
+                  AND genre != '' 
+                  AND genre != '(no genres listed)'
+                GROUP BY genre
+                ORDER BY count DESC
+                LIMIT 5
+                """,
+                (user_id,)
+            )
+        
+        genre_rows = cur.fetchall()
+        top_genres = [
+            {"genre": row[0], "count": row[1]}
+            for row in genre_rows
         ]
-
-    return {
-        "total": int(total or 0),
-        "avg": float(avg) if avg is not None else None,
-        "by_genre": by_genre,
-    }
+        
+        return {
+            "total_ratings": total_ratings,
+            "average_rating": average_rating,
+            "top_genres": top_genres
+        }

@@ -19,7 +19,7 @@
             <button class="nav-tab" id="nav_home" aria-current="page">
               Home
             </button>
-            <button class="nav-tab" id="view_ratings_button">Profile</button>
+            <a href="{{ url_for('profile_page') }}" class="nav-tab">Profile</a>
             <a
               href="{{ url_for('browse_page') }}"
               class="nav-tab"
