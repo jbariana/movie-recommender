@@ -214,6 +214,28 @@ def handle_button_click(button_id, payload=None):
                 sync_user_ratings(PROFILE_PATH)
             except Exception as ex:
                 logger.warning("sync_user_ratings failed on add: %s", ex)
+            
+            # invalidate cached recommendations so new rating takes effect
+            try:
+                from flask import session
+                from database.users import get_user_by_username
+                from cache import cache, key_content_recs
+                
+                uname = session.get("username")
+                user_id_for_cache = None
+                if uname:
+                    ur = get_user_by_username(uname)  # (id, username, hash)
+                    if ur:
+                        user_id_for_cache = int(ur[0])
+                if not user_id_for_cache:
+                    # fallback to profile file if available
+                    user_id_for_cache = int((prof or {}).get("user_id") or 0)
+                
+                if user_id_for_cache:
+                    for size in (10, 20, 50, 100):
+                        cache.delete(key_content_recs(user_id=user_id_for_cache, k=size))
+            except Exception as _ex:
+                logger.warning("cache bust on rating failed: %s", _ex)
 
             # return updated ratings with titles
             results = []
