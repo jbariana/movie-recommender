@@ -8,6 +8,7 @@ from recommender.data_loader import load_movies_df, load_ratings_df
 from database.connection import get_db
 from database.paramstyle import ph_list
 from database.db_query import top_unseen_for_user
+from cache import cache, key_content_recs
 
 # ----------------------------
 # Feature building (genres + year)
@@ -118,7 +119,7 @@ def recommend_for_user(user_id: int, k: int = 20) -> List[Tuple[int, float]]:
     vals = scores[top_idx].astype(float).tolist()
     return list(zip(mids, vals))
 
-
+@cache.cached(ttl=900, key_fn=lambda user_id, k=20, **kw: key_content_recs(user_id=user_id, k=k, **kw))
 def recommend_titles_for_user(user_id: int, k: int = 20) -> List[Dict]:
     """
     Same as recommend_for_user, but returns movie metadata for convenience:
@@ -163,3 +164,4 @@ def recommend_titles_for_user(user_id: int, k: int = 20) -> List[Dict]:
             }
         )
     return out
+
