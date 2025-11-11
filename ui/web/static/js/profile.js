@@ -5,36 +5,66 @@ let ratingsData = [];
 let favoritesData = [];
 let watchlistData = [];
 
-// Tab switching
+// ---- tiny helpers -----------------------------------------------------------
+function toast(msg, isError = false) {
+  const el = document.createElement("div");
+  el.className = isError ? "error-message" : "success-message";
+  el.style.marginBottom = "0.75rem";
+  el.textContent = msg;
+  const area = document.getElementById("ratings-list") || document.body;
+  area.prepend(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+function updateHeaderStats() {
+  const totalEl = document.getElementById("total-ratings");
+  const avgEl = document.getElementById("avg-rating");
+  if (totalEl) totalEl.textContent = ratingsData.length;
+
+  const avg =
+    ratingsData.length > 0
+      ? ratingsData.reduce((s, r) => s + (r.rating || 0), 0) / ratingsData.length
+      : 0;
+  if (avgEl) avgEl.textContent = avg.toFixed(1);
+}
+
+// ---- Tab switching ----------------------------------------------------------
 const tabs = document.querySelectorAll(".profile-tab");
 const tabContents = document.querySelectorAll(".profile-tab-content");
+
+function activateTab(tabName) {
+  tabs.forEach((t) => {
+    const active = t.dataset.tab === tabName;
+    t.classList.toggle("active", active);
+  });
+  tabContents.forEach((c) => {
+    c.classList.toggle("active", c.id === `tab-${tabName}`);
+  });
+
+  // lazy load per tab
+  if (tabName === "ratings" && ratingsData.length === 0) {
+    loadRatings();
+  } else if (tabName === "favorites") {
+    loadFavorites();
+  } else if (tabName === "watchlist") {
+    loadWatchlist();
+  } else if (tabName === "statistics") {
+    loadStatistics();
+  }
+}
 
 tabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const targetTab = tab.dataset.tab;
-
-    // Update active tab
-    tabs.forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-
-    // Update active content
-    tabContents.forEach((content) => content.classList.remove("active"));
-    document.getElementById(`tab-${targetTab}`).classList.add("active");
-
-    // Load data for the tab if needed
-    if (targetTab === "ratings" && ratingsData.length === 0) {
-      loadRatings();
-    } else if (targetTab === "favorites") {
-      loadFavorites();
-    } else if (targetTab === "watchlist") {
-      loadWatchlist();
-    } else if (targetTab === "statistics") {
-      loadStatistics();
-    }
+    activateTab(targetTab);
+    // keep URL in sync (no reload)
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", targetTab);
+    history.replaceState(null, "", url.toString());
   });
 });
 
-// Sort ratings button
+// ---- Sort ratings button ----------------------------------------------------
 document.getElementById("sort-ratings")?.addEventListener("click", () => {
   if (currentSortOrder === "date") {
     currentSortOrder = "rating";
@@ -70,6 +100,7 @@ function sortRatings(by) {
   renderRatings();
 }
 
+// ---- Load & render ratings --------------------------------------------------
 async function loadRatings() {
   const container = document.getElementById("ratings-list");
   container.innerHTML = '<p class="loading">Loading ratings...</p>';
@@ -85,16 +116,7 @@ async function loadRatings() {
     const data = await response.json();
     ratingsData = data.ratings || [];
 
-    // Update stats
-    document.getElementById("total-ratings").textContent = ratingsData.length;
-
-    if (ratingsData.length > 0) {
-      const avgRating =
-        ratingsData.reduce((sum, r) => sum + (r.rating || 0), 0) /
-        ratingsData.length;
-      document.getElementById("avg-rating").textContent = avgRating.toFixed(1);
-    }
-
+    updateHeaderStats();
     renderRatings();
   } catch (err) {
     console.error("Failed to load ratings:", err);
@@ -109,6 +131,7 @@ function renderRatings() {
   if (ratingsData.length === 0) {
     container.innerHTML =
       '<p class="info-message">No ratings yet. Start rating movies!</p>';
+    updateHeaderStats();
     return;
   }
 
@@ -117,6 +140,7 @@ function renderRatings() {
   ratingsData.forEach((movie) => {
     const item = document.createElement("div");
     item.className = "movie-list-item";
+    item.dataset.movieId = movie.movie_id;
 
     const stars = "★".repeat(Math.floor(movie.rating || 0));
 
@@ -141,23 +165,15 @@ function renderRatings() {
         <span class="rating-value">${movie.rating || 0}</span>
       </div>
       <div class="movie-list-actions">
-        <button class="btn-icon favorite" title="Add to favorites" data-movie-id="${
-          movie.movie_id
-        }">
-          ♥
-        </button>
-        <button class="btn-icon watchlist" title="Add to watchlist" data-movie-id="${
-          movie.movie_id
-        }">
-          🔖
-        </button>
+        <button class="btn-icon favorite" title="Add to favorites" data-movie-id="${movie.movie_id}">♥</button>
+        <button class="btn-icon watchlist" title="Add to watchlist" data-movie-id="${movie.movie_id}">🔖</button>
+        <button class="btn-icon remove" title="Remove rating" data-movie-id="${movie.movie_id}">🗑️</button>
       </div>
     `;
 
     container.appendChild(item);
   });
 
-  // Add event listeners for favorite/watchlist buttons
   attachActionListeners();
 }
 
@@ -177,37 +193,60 @@ function attachActionListeners() {
       toggleWatchlist(movieId, btn);
     });
   });
+
+  document.querySelectorAll(".btn-icon.remove").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const movieId = btn.dataset.movieId;
+      await deleteRating(movieId);
+    });
+  });
 }
 
+async function deleteRating(movieId) {
+  try {
+    const res = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ button: "remove_rating", movie_id: movieId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || data?.error) {
+      toast(data?.error || `Failed to remove rating for ${movieId}`, true);
+      return;
+    }
+
+    ratingsData = ratingsData.filter((m) => String(m.movie_id) !== String(movieId));
+    renderRatings();
+    updateHeaderStats();
+    toast(data?.message || "Rating removed.");
+  } catch (err) {
+    console.error(err);
+    toast("Error contacting backend.", true);
+  }
+}
+
+// ---- Favorites & Watchlist (local only for now) ----------------------------
 function toggleFavorite(movieId, btn) {
-  // Check if already in favorites
   const index = favoritesData.findIndex((m) => m.movie_id == movieId);
 
   if (index >= 0) {
-    // Remove from favorites
     favoritesData.splice(index, 1);
     btn.classList.remove("active");
-    localStorage.setItem("favorites", JSON.stringify(favoritesData));
-    document.getElementById("total-favorites").textContent =
-      favoritesData.length;
-    if (document.getElementById("tab-favorites").classList.contains("active")) {
-      renderFavorites();
-    }
   } else {
-    // Add to favorites
     const movie = ratingsData.find((m) => m.movie_id == movieId);
     if (movie) {
       favoritesData.push(movie);
       btn.classList.add("active");
-      localStorage.setItem("favorites", JSON.stringify(favoritesData));
-      document.getElementById("total-favorites").textContent =
-        favoritesData.length;
-      if (
-        document.getElementById("tab-favorites").classList.contains("active")
-      ) {
-        renderFavorites();
-      }
     }
+  }
+
+  localStorage.setItem("favorites", JSON.stringify(favoritesData));
+  document.getElementById("total-favorites").textContent = favoritesData.length;
+  if (document.getElementById("tab-favorites").classList.contains("active")) {
+    renderFavorites();
   }
 }
 
@@ -217,31 +256,23 @@ function toggleWatchlist(movieId, btn) {
   if (index >= 0) {
     watchlistData.splice(index, 1);
     btn.classList.remove("active");
-    localStorage.setItem("watchlist", JSON.stringify(watchlistData));
-    document.getElementById("total-watchlist").textContent =
-      watchlistData.length;
-    if (document.getElementById("tab-watchlist").classList.contains("active")) {
-      renderWatchlist();
-    }
   } else {
     const movie = ratingsData.find((m) => m.movie_id == movieId);
     if (movie) {
       watchlistData.push(movie);
       btn.classList.add("active");
-      localStorage.setItem("watchlist", JSON.stringify(watchlistData));
-      document.getElementById("total-watchlist").textContent =
-        watchlistData.length;
-      if (
-        document.getElementById("tab-watchlist").classList.contains("active")
-      ) {
-        renderWatchlist();
-      }
     }
+  }
+
+  localStorage.setItem("watchlist", JSON.stringify(watchlistData));
+  document.getElementById("total-watchlist").textContent =
+    watchlistData.length;
+  if (document.getElementById("tab-watchlist").classList.contains("active")) {
+    renderWatchlist();
   }
 }
 
 function loadFavorites() {
-  // Load from localStorage for now (backend will come later)
   const stored = localStorage.getItem("favorites");
   favoritesData = stored ? JSON.parse(stored) : [];
   document.getElementById("total-favorites").textContent = favoritesData.length;
@@ -283,6 +314,7 @@ function renderWatchlist() {
   container.appendChild(grid);
 }
 
+// ---- Statistics -------------------------------------------------------------
 async function loadStatistics() {
   const container = document.getElementById("statistics-content");
   container.innerHTML = '<p class="loading">Loading statistics...</p>';
@@ -299,7 +331,6 @@ async function loadStatistics() {
 
     const stats = await response.json();
 
-    // Build genre items
     let genreHtml = "";
     if (stats.top_genres && stats.top_genres.length > 0) {
       genreHtml = stats.top_genres
@@ -344,7 +375,7 @@ async function loadStatistics() {
   }
 }
 
-// Initialize
+// ---- Initialize -------------------------------------------------------------
 async function init() {
   const username = await checkSession();
   if (!username) {
@@ -352,12 +383,21 @@ async function init() {
     return;
   }
 
-  // Load favorites and watchlist from localStorage
   loadFavorites();
   loadWatchlist();
 
-  // Load ratings by default
-  await loadRatings();
+  // pick initial tab from ?tab= or #hash; default "ratings"
+  const url = new URL(window.location.href);
+  const requested =
+    url.searchParams.get("tab") ||
+    (window.location.hash ? window.location.hash.substring(1) : null) ||
+    "ratings";
+
+  // ensure a valid tab key
+  const valid = ["ratings", "favorites", "watchlist", "statistics"];
+  const initialTab = valid.includes(requested) ? requested : "ratings";
+
+  activateTab(initialTab);
 }
 
 init();

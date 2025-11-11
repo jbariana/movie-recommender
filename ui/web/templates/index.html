@@ -4,50 +4,35 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Movie Recommender</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
-    />
+
+    <!-- existing global styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <!-- new: small home-page styles (create ui/web/static/css/home.css) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}" />
   </head>
+
   <body>
+    <!-- ===== Header / Nav (unchanged) ===== -->
     <header class="header">
       <div class="header-inner">
         <h1>Movie Recommender</h1>
 
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
           <div class="nav-left">
-            <button class="nav-tab" id="nav_home" aria-current="page">
-              Home
-            </button>
+            <button class="nav-tab" id="nav_home" aria-current="page">Home</button>
             <a href="{{ url_for('profile_page') }}" class="nav-tab">Profile</a>
-            <a
-              href="{{ url_for('browse_page') }}"
-              class="nav-tab"
-              id="get_rec_button"
-              >Browse</a
-            >
+            <a href="{{ url_for('browse_page') }}" class="nav-tab" id="get_rec_button">Browse</a>
           </div>
 
           <div class="nav-right">
             <div class="nav-search">
-              <input
-                id="search_input"
-                type="text"
-                placeholder="Search movies"
-              />
+              <input id="search_input" type="text" placeholder="Search movies" />
               <button id="search_button" type="button">Search</button>
             </div>
 
             {% if session.get('username') %}
-            <form
-              method="POST"
-              action="{{ url_for('api_bp.auth_logout') }}"
-              class="login-form"
-              style="margin-left: 0.75rem"
-            >
-              <small class="login-status"
-                >Logged in as <b>{{ session['username'] }}</b></small
-              >
+            <form method="POST" action="{{ url_for('api_bp.auth_logout') }}" class="login-form" style="margin-left: 0.75rem">
+              <small class="login-status">Logged in as <b>{{ session['username'] }}</b></small>
               <button type="submit" style="margin-left: 0.5rem">Logout</button>
             </form>
             {% else %}
@@ -62,71 +47,103 @@
       </div>
     </header>
 
-    {% with messages = get_flashed_messages(with_categories=true) %} {% if
-    messages %}
-    <ul style="margin: 1rem; list-style: disc; padding-left: 2rem">
-      {% for category, message in messages %}
-      <li
-        class="flash-message {% if category == 'error' %}flash-error{% else %}flash-success{% endif %}"
-      >
-        {{ message }}
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %} {% endwith %}
+    <!-- ===== Flash messages (unchanged) ===== -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <ul style="margin: 1rem; list-style: disc; padding-left: 2rem">
+        {% for category, message in messages %}
+        <li class="flash-message {% if category == 'error' %}flash-error{% else %}flash-success{% endif %}">
+          {{ message }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    {% endwith %}
 
+    <!-- ===== Main ===== -->
     <main class="container">
+
+      <!-- ===== Hero + Quick Actions ===== -->
+      <section class="hero">
+        <h1>Find your next favorite movie</h1>
+        <p>Browse our collection and get recommendations tailored to your taste.</p>
+
+        <div class="hero-actions">
+          <a class="btn-primary" href="{{ url_for('browse_page') }}">Browse Movies</a>
+          {% if session.get('username') %}
+          <a class="btn-secondary" href="{{ url_for('profile_page') }}">Your Profile</a>
+          {% else %}
+          <a class="btn-secondary" href="{{ url_for('api_bp.auth_login') }}">Log In</a>
+          {% endif %}
+        </div>
+
+        <!-- Quick Genre Chips (link into /browse with ?genre=) -->
+        <div class="genre-row" id="genreRow">
+          <button class="genre-chip" data-genre="Action">Action</button>
+          <button class="genre-chip" data-genre="Comedy">Comedy</button>
+          <button class="genre-chip" data-genre="Drama">Drama</button>
+          <button class="genre-chip" data-genre="Fantasy">Fantasy</button>
+          <button class="genre-chip" data-genre="Horror">Horror</button>
+          <button class="genre-chip" data-genre="Romance">Romance</button>
+          <button class="genre-chip" data-genre="Sci-Fi">Sci-Fi</button>
+          <button class="genre-chip" data-genre="Animation">Animation</button>
+        </div>
+      </section>
+
+      <!-- Logged-in quick panels (kept, restyled by home.css) -->
       {% if session.get('username') %}
-      <div class="top-row">
-        <div class="user section">
-          <h2>My Profile</h2>
-          <div class="user-controls">
-            <button id="view_statistics_button">View Statistics</button>
+      <section class="quick-panels">
+        <div class="panel">
+          <h3>My Profile</h3>
+          <p>View your stats and recent activity.</p>
+          <div style="margin-top: 8px;">
+            <a href="{{ url_for('profile_page') }}?tab=statistics" class="btn-primary">View Statistics</a>
           </div>
         </div>
 
-        <div class="action section">
-          <h2>Quick Actions</h2>
-          <div class="action-controls">
-            <button id="add_rating_button">Add Rating</button>
-            <div
-              id="add-rating-box"
-              class="add-rating-box"
-              aria-hidden="true"
-            ></div>
-            <button id="remove_rating_button">Remove Rating</button>
+        <div class="panel">
+          <h3>Quick Actions</h3>
+          <p>Add or remove a rating to sharpen your recs.</p>
+          <div class="hero-actions" style="justify-content:flex-start;margin-top:8px;">
+            <a class="btn-primary" href="{{ url_for('browse_page') }}">Add Rating</a>
+            <a class="btn-secondary" href="{{ url_for('profile_page') }}">Remove Rating</a>
           </div>
         </div>
-      </div>
+      </section>
       {% else %}
-      <div class="welcome-section">
-        <h2>Welcome to Movie Recommender</h2>
-        <p>
-          Discover movies tailored to your taste. Sign up or log in to get
-          started.
-        </p>
-        <div style="margin-top: 1rem">
-          <a href="{{ url_for('api_bp.auth_signup') }}" class="btn-primary"
-            >Sign Up</a
-          >
-          <a href="{{ url_for('api_bp.auth_login') }}" class="btn-secondary"
-            >Log In</a
-          >
+      <!-- For logged-out users, keep welcome CTA (still visible below hero) -->
+      <section class="quick-panels">
+        <div class="panel">
+          <h3>New here?</h3>
+          <p>Create an account to save ratings and get better recommendations.</p>
+          <div style="margin-top: 8px;">
+            <a class="btn-primary" href="{{ url_for('api_bp.auth_signup') }}">Sign Up</a>
+            <a class="btn-secondary" href="{{ url_for('api_bp.auth_login') }}">Log In</a>
+          </div>
         </div>
-      </div>
+      </section>
       {% endif %}
 
-      <section
-        id="output"
-        class="output"
-        role="region"
-        aria-live="polite"
-      ></section>
+      <!-- Your existing dynamic output region (kept) -->
+      <section id="output" class="output" role="region" aria-live="polite"></section>
     </main>
 
-    <script
-      type="module"
-      src="{{ url_for('static', filename='js/main.js') }}"
-    ></script>
+    <!-- ===== Scripts ===== -->
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Tiny inline handler for the genre chips -->
+    <script>
+      (function () {
+        const row = document.getElementById('genreRow');
+        if (!row) return;
+        row.addEventListener('click', (e) => {
+          const chip = e.target.closest('.genre-chip');
+          if (!chip) return;
+          const genre = encodeURIComponent(chip.dataset.genre);
+          // Navigate to Browse with a pre-applied genre filter
+          window.location.href = "{{ url_for('browse_page') }}" + "?genre=" + genre;
+        });
+      })();
+    </script>
   </body>
 </html>
