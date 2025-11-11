@@ -53,6 +53,39 @@ function toQuery(o) {
   return p.toString();
 }
 
+function readUrlParams() {
+  const u = new URLSearchParams(window.location.search);
+  return {
+    genre: u.get("genre") || "",
+    sort: u.get("sort") || "title",
+    dir: u.get("dir") || "asc",
+    page: parseInt(u.get("page") || "1", 10),
+  };
+}
+
+function writeUrlParams(params, replace = false) {
+  const current = new URL(window.location.href);
+  const merged = {
+    genre: params.genre ?? state.genre,
+    sort: params.sort ?? state.sort,
+    dir: params.dir ?? state.dir,
+    page: params.page ?? state.page,
+  };
+  // Drop empty params for clean URLs
+  const qs = toQuery({
+    genre: merged.genre || undefined,
+    sort: merged.sort || undefined,
+    dir: merged.dir || undefined,
+    page: merged.page > 1 ? merged.page : undefined,
+  });
+  const nextUrl = `${current.pathname}${qs ? "?" + qs : ""}`;
+  if (replace) {
+    history.replaceState(null, "", nextUrl);
+  } else {
+    history.pushState(null, "", nextUrl);
+  }
+}
+
 // ---------------- API helpers for new catalog ----------------
 async function fetchGenres() {
   try {
@@ -318,27 +351,8 @@ async function init() {
   const username = await checkSession();
   if (username) {
     renderLoggedIn(username);
-
-    // ✅ Show loading immediately
-    outputDiv.innerHTML = '<p class="loading">Loading recommendations...</p>';
-    metaSpan.textContent = "";
-    pager.style.display = "none";
-
-    // ✅ Load content-based recommendations (don't await - let it happen in background)
-    loadContentRecs().catch((err) => {
-      console.error("Failed to load recommendations:", err);
-      outputDiv.innerHTML =
-        '<p class="error-message">Failed to load recommendations. Please try again.</p>';
-    });
-
-    // ✅ Load genres in parallel
-    fetchGenres().catch((err) => {
-      console.warn("Failed to load genres:", err);
-    });
   } else {
     renderLoggedOut();
-    outputDiv.innerHTML =
-      '<p>Please <a href="/">login</a> to see recommendations.</p>';
   }
 
   setupNavigation();
@@ -349,31 +363,73 @@ async function init() {
     initSearch(searchInput, searchButton, outputDiv);
   }
 
+  // Always fetch genres first so we can preselect from URL
+  await fetchGenres();
+
+  // Read URL params (supports chips like /browse?genre=Action)
+  const params = readUrlParams();
+  if (genreSelect) genreSelect.value = params.genre || "";
+  if (sortSelect) sortSelect.value = params.sort || "title";
+  if (dirSelect) dirSelect.value = params.dir || "asc";
+
+  state.genre = params.genre || "";
+  state.sort = params.sort || "title";
+  state.dir = params.dir || "asc";
+  state.page = Number.isFinite(params.page) && params.page > 0 ? params.page : 1;
+
+  if (state.genre) {
+    // If a genre is preselected via URL, show catalog immediately
+    writeUrlParams({}, true); // normalize/clean URL (remove empty params)
+    await loadCatalogPage();
+  } else if (username) {
+    // Default for logged-in users: recommendations
+    outputDiv.innerHTML = '<p class="loading">Loading recommendations...</p>';
+    metaSpan && (metaSpan.textContent = "");
+    pager && (pager.style.display = "none");
+    loadContentRecs().catch((err) => {
+      console.error("Failed to load recommendations:", err);
+      outputDiv.innerHTML =
+        '<p class="error-message">Failed to load recommendations. Please try again.</p>';
+    });
+  } else {
+    // Logged-out & no genre: show catalog first page
+    await loadCatalogPage();
+  }
+
+  // ---- Controls ----
   applyBtn?.addEventListener("click", () => {
     state.genre = genreSelect.value;
     state.sort = sortSelect.value;
     state.dir = dirSelect.value;
     state.page = 1;
+    writeUrlParams({}); // reflect filters in URL
     loadCatalogPage();
   });
 
   resetBtn?.addEventListener("click", () => {
-    genreSelect.value = "";
-    sortSelect.value = "title";
-    dirSelect.value = "asc";
+    if (genreSelect) genreSelect.value = "";
+    if (sortSelect) sortSelect.value = "title";
+    if (dirSelect) dirSelect.value = "asc";
     state.genre = "";
     state.sort = "title";
     state.dir = "asc";
     state.page = 1;
-    pager.style.display = "none";
-    metaSpan.textContent = "";
-    loadContentRecs();
+    pager && (pager.style.display = "none");
+    metaSpan && (metaSpan.textContent = "");
+    // Clean the URL and go back to recs if logged in, else catalog
+    writeUrlParams({ genre: "", page: 1 }, true);
+    if (isLoggedIn()) {
+      loadContentRecs();
+    } else {
+      loadCatalogPage();
+    }
   });
 
   prevBtn?.addEventListener("click", () => {
     if (mode !== "catalog") return;
     if (state.page > 1) {
       state.page -= 1;
+      writeUrlParams({ page: state.page });
       loadCatalogPage();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -382,14 +438,37 @@ async function init() {
   nextBtn?.addEventListener("click", () => {
     if (mode !== "catalog") return;
     state.page += 1;
+    writeUrlParams({ page: state.page });
     loadCatalogPage();
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
   getRecsBtn?.addEventListener("click", () => {
+    // Switch to recommendations view
+    writeUrlParams({ genre: "", page: 1 }, true);
     loadContentRecs();
   });
 
+  // Handle browser back/forward to keep filters in sync
+  window.addEventListener("popstate", () => {
+    const p = readUrlParams();
+    if (genreSelect) genreSelect.value = p.genre || "";
+    if (sortSelect) sortSelect.value = p.sort || "title";
+    if (dirSelect) dirSelect.value = p.dir || "asc";
+    state.genre = p.genre || "";
+    state.sort = p.sort || "title";
+    state.dir = p.dir || "asc";
+    state.page = Number.isFinite(p.page) && p.page > 0 ? p.page : 1;
+    if (state.genre || mode === "catalog") {
+      loadCatalogPage();
+    } else if (isLoggedIn()) {
+      loadContentRecs();
+    } else {
+      loadCatalogPage();
+    }
+  });
+
+  // Also refresh recs on login event
   window.addEventListener("userLoggedIn", async () => {
     await fetchGenres();
     loadContentRecs();
