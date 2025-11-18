@@ -375,7 +375,8 @@ async function init() {
   state.genre = params.genre || "";
   state.sort = params.sort || "title";
   state.dir = params.dir || "asc";
-  state.page = Number.isFinite(params.page) && params.page > 0 ? params.page : 1;
+  state.page =
+    Number.isFinite(params.page) && params.page > 0 ? params.page : 1;
 
   if (state.genre) {
     // If a genre is preselected via URL, show catalog immediately

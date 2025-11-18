@@ -9,7 +9,7 @@ let watchlistData = [];
 // ===== per-user storage =====
 let USERNAME = null;
 const favKey = () => (USERNAME ? `favorites:${USERNAME}` : "favorites");
-const wlKey  = () => (USERNAME ? `watchlist:${USERNAME}` : "watchlist");
+const wlKey = () => (USERNAME ? `watchlist:${USERNAME}` : "watchlist");
 
 function loadFromStorage(key, fallback = []) {
   try {
@@ -20,7 +20,27 @@ function loadFromStorage(key, fallback = []) {
   }
 }
 function saveToStorage(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    // ignore
+  }
+}
+
+function movieInList(list, movieId) {
+  return list.some((m) => String(m.movie_id) === String(movieId));
+}
+
+// Merge rating/year/genres from ratingsData into another list (favorites/watchlist)
+function syncListWithRatings(list) {
+  if (!ratingsData.length || !list.length) return list;
+  const merged = list.map((item) => {
+    const match = ratingsData.find(
+      (r) => String(r.movie_id) === String(item.movie_id)
+    );
+    return match ? { ...item, ...match } : item;
+  });
+  return merged;
 }
 
 // ---- tiny helpers -----------------------------------------------------------
@@ -41,9 +61,15 @@ function updateHeaderStats() {
 
   const avg =
     ratingsData.length > 0
-      ? ratingsData.reduce((s, r) => s + (r.rating || 0), 0) / ratingsData.length
+      ? ratingsData.reduce((s, r) => s + (r.rating || 0), 0) /
+        ratingsData.length
       : 0;
   if (avgEl) avgEl.textContent = avg.toFixed(1);
+
+  const favEl = document.getElementById("total-favorites");
+  const wlEl = document.getElementById("total-watchlist");
+  if (favEl) favEl.textContent = favoritesData.length;
+  if (wlEl) wlEl.textContent = watchlistData.length;
 }
 
 // ---- Tab switching ----------------------------------------------------------
@@ -108,7 +134,9 @@ function sortRatings(by) {
     sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   } else if (by === "title") {
     sorted.sort((a, b) =>
-      (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" })
+      (a.title || "").localeCompare(b.title || "", undefined, {
+        sensitivity: "base",
+      })
     );
   }
 
@@ -132,11 +160,18 @@ async function loadRatings() {
     const data = await response.json();
     ratingsData = data.ratings || [];
 
+    // sync favorites/watchlist objects with the latest ratings
+    favoritesData = syncListWithRatings(favoritesData);
+    watchlistData = syncListWithRatings(watchlistData);
+    saveToStorage(favKey(), favoritesData);
+    saveToStorage(wlKey(), watchlistData);
+
     updateHeaderStats();
     renderRatings();
   } catch (err) {
     console.error("Failed to load ratings:", err);
-    container.innerHTML = '<p class="error-message">Failed to load ratings.</p>';
+    container.innerHTML =
+      '<p class="error-message">Failed to load ratings.</p>';
   }
 }
 
@@ -158,6 +193,11 @@ function renderRatings() {
     item.dataset.movieId = movie.movie_id;
 
     const stars = "★".repeat(Math.floor(movie.rating || 0));
+    const isFavorite = movieInList(favoritesData, movie.movie_id);
+    const inWatchlist = movieInList(watchlistData, movie.movie_id);
+
+    const favClass = `btn-icon favorite${isFavorite ? " active" : ""}`;
+    const wlClass = `btn-icon watchlist${inWatchlist ? " active" : ""}`;
 
     item.innerHTML = `
       <div class="movie-list-poster">
@@ -168,7 +208,9 @@ function renderRatings() {
         }
       </div>
       <div class="movie-list-info">
-        <div class="movie-list-title">${movie.title || movie.movie || "Untitled"}</div>
+        <div class="movie-list-title">${
+          movie.title || movie.movie || "Untitled"
+        }</div>
         <div class="movie-list-meta">
           ${movie.year ? movie.year + " • " : ""}${movie.genres || ""}
         </div>
@@ -178,9 +220,15 @@ function renderRatings() {
         <span class="rating-value">${movie.rating || 0}</span>
       </div>
       <div class="movie-list-actions">
-        <button class="btn-icon favorite"  title="Add to favorites" data-movie-id="${movie.movie_id}">♥</button>
-        <button class="btn-icon watchlist" title="Add to watchlist" data-movie-id="${movie.movie_id}">🔖</button>
-        <button class="btn-icon remove"    title="Remove rating"    data-movie-id="${movie.movie_id}">🗑️</button>
+        <button class="${favClass}"  title="Add to favorites" data-movie-id="${
+      movie.movie_id
+    }">♥</button>
+        <button class="${wlClass}"   title="Add to watchlist" data-movie-id="${
+      movie.movie_id
+    }">🔖</button>
+        <button class="btn-icon remove"    title="Remove rating"    data-movie-id="${
+          movie.movie_id
+        }">🗑️</button>
       </div>
     `;
 
@@ -228,7 +276,18 @@ async function deleteRating(movieId) {
       return;
     }
 
-    ratingsData = ratingsData.filter((m) => String(m.movie_id) !== String(movieId));
+    ratingsData = ratingsData.filter(
+      (m) => String(m.movie_id) !== String(movieId)
+    );
+    favoritesData = favoritesData.filter(
+      (m) => String(m.movie_id) !== String(movieId)
+    );
+    watchlistData = watchlistData.filter(
+      (m) => String(m.movie_id) !== String(movieId)
+    );
+    saveToStorage(favKey(), favoritesData);
+    saveToStorage(wlKey(), watchlistData);
+
     renderRatings();
     updateHeaderStats();
     toast(data?.message || "Rating removed.");
@@ -240,42 +299,52 @@ async function deleteRating(movieId) {
 
 // ---- Favorites & Watchlist (per-user local) --------------------------------
 function toggleFavorite(movieId, btn) {
-  const idx = favoritesData.findIndex((m) => String(m.movie_id) === String(movieId));
+  const idx = favoritesData.findIndex(
+    (m) => String(m.movie_id) === String(movieId)
+  );
 
   if (idx >= 0) {
     favoritesData.splice(idx, 1);
     btn.classList.remove("active");
   } else {
-    const movie = ratingsData.find((m) => String(m.movie_id) === String(movieId));
+    const movie = ratingsData.find(
+      (m) => String(m.movie_id) === String(movieId)
+    );
     if (movie) {
-      favoritesData.push(movie);
+      favoritesData.push({ ...movie });
       btn.classList.add("active");
     }
   }
 
   saveToStorage(favKey(), favoritesData);
-  document.getElementById("total-favorites").textContent = favoritesData.length;
+  updateHeaderStats();
+
   if (document.getElementById("tab-favorites").classList.contains("active")) {
     renderFavorites();
   }
 }
 
 function toggleWatchlist(movieId, btn) {
-  const idx = watchlistData.findIndex((m) => String(m.movie_id) === String(movieId));
+  const idx = watchlistData.findIndex(
+    (m) => String(m.movie_id) === String(movieId)
+  );
 
   if (idx >= 0) {
     watchlistData.splice(idx, 1);
     btn.classList.remove("active");
   } else {
-    const movie = ratingsData.find((m) => String(m.movie_id) === String(movieId));
+    const movie = ratingsData.find(
+      (m) => String(m.movie_id) === String(movieId)
+    );
     if (movie) {
-      watchlistData.push(movie);
+      watchlistData.push({ ...movie });
       btn.classList.add("active");
     }
   }
 
   saveToStorage(wlKey(), watchlistData);
-  document.getElementById("total-watchlist").textContent = watchlistData.length;
+  updateHeaderStats();
+
   if (document.getElementById("tab-watchlist").classList.contains("active")) {
     renderWatchlist();
   }
@@ -283,7 +352,9 @@ function toggleWatchlist(movieId, btn) {
 
 function loadFavorites() {
   favoritesData = loadFromStorage(favKey(), []);
-  document.getElementById("total-favorites").textContent = favoritesData.length;
+  favoritesData = syncListWithRatings(favoritesData);
+  saveToStorage(favKey(), favoritesData);
+  updateHeaderStats();
   renderFavorites();
 }
 
@@ -303,7 +374,9 @@ function renderFavorites() {
 
 function loadWatchlist() {
   watchlistData = loadFromStorage(wlKey(), []);
-  document.getElementById("total-watchlist").textContent = watchlistData.length;
+  watchlistData = syncListWithRatings(watchlistData);
+  saveToStorage(wlKey(), watchlistData);
+  updateHeaderStats();
   renderWatchlist();
 }
 
@@ -387,9 +460,10 @@ async function init() {
     return;
   }
 
-  // load per-user lists
-  loadFavorites();
-  loadWatchlist();
+  // load per-user lists from storage before first render
+  favoritesData = loadFromStorage(favKey(), []);
+  watchlistData = loadFromStorage(wlKey(), []);
+  updateHeaderStats();
 
   // pick initial tab from ?tab= or #hash; default "ratings"
   const url = new URL(window.location.href);
@@ -402,6 +476,43 @@ async function init() {
   const initialTab = valid.includes(requested) ? requested : "ratings";
 
   activateTab(initialTab);
+
+  // Listen for rating changes from ratingModal.js
+  window.addEventListener("ratingUpdated", (e) => {
+    const detail = e.detail || {};
+    const movieId = detail.movie_id;
+    const rating = detail.rating;
+
+    if (!movieId) return;
+
+    // update ratingsData if we already have it
+    const existing = ratingsData.find(
+      (m) => String(m.movie_id) === String(movieId)
+    );
+    if (existing) {
+      existing.rating = rating;
+      existing.timestamp = existing.timestamp || Math.floor(Date.now() / 1000);
+    }
+
+    // reload lists from storage to pick up new ratings + membership
+    favoritesData = loadFromStorage(favKey(), favoritesData);
+    watchlistData = loadFromStorage(wlKey(), watchlistData);
+    favoritesData = syncListWithRatings(favoritesData);
+    watchlistData = syncListWithRatings(watchlistData);
+
+    saveToStorage(favKey(), favoritesData);
+    saveToStorage(wlKey(), watchlistData);
+
+    updateHeaderStats();
+    renderRatings();
+
+    if (document.getElementById("tab-favorites").classList.contains("active")) {
+      renderFavorites();
+    }
+    if (document.getElementById("tab-watchlist").classList.contains("active")) {
+      renderWatchlist();
+    }
+  });
 }
 
 init();
