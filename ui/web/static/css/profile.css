@@ -1,7 +1,8 @@
 /* Profile Page Styles */
 .profile-container {
-  max-width: 1200px;
+  max-width: 100%;
   margin: 0 auto;
+  padding: 0 20px;
 }
 
 /* Profile Header */
@@ -14,6 +15,9 @@
   border-radius: 8px;
   margin-bottom: 2rem;
   border: 1px solid #1a2532;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .profile-avatar {
@@ -74,6 +78,9 @@
   margin-bottom: 2rem;
   border-bottom: 2px solid #1a2532;
   overflow-x: auto;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .profile-tab {
@@ -100,6 +107,10 @@
 /* Tab Content */
 .profile-content {
   min-height: 400px;
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .profile-tab-content {
@@ -146,82 +157,6 @@
   border-color: var(--accent);
 }
 
-/* Movie List (for ratings) */
-.movie-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.movie-list-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--card);
-  border-radius: 8px;
-  border: 1px solid #1a2532;
-  transition: border-color 120ms ease;
-}
-
-.movie-list-item:hover {
-  border-color: var(--accent);
-}
-
-.movie-list-poster {
-  width: 60px;
-  height: 90px;
-  border-radius: 6px;
-  background: #1a2532;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.movie-list-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.movie-list-title {
-  font-weight: 600;
-  color: var(--text);
-  font-size: 1.05rem;
-  margin-bottom: 0.25rem;
-}
-
-.movie-list-meta {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.movie-list-rating {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.rating-stars {
-  color: var(--accent);
-  font-size: 1.25rem;
-}
-
-.rating-value {
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
-.movie-list-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
 .btn-icon {
   width: 36px;
   height: 36px;
@@ -247,38 +182,17 @@
   color: white;
 }
 
-.btn-icon.favorite.active {
+.btn-icon.btn-favorite.active {
   background: #e74c3c;
   border-color: #e74c3c;
+  color: white;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .profile-header {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .profile-stats {
-    justify-content: center;
-  }
-
-  .profile-avatar {
-    width: 80px;
-    height: 80px;
-    font-size: 2rem;
-  }
-
-  .profile-username {
-    font-size: 1.5rem;
-  }
-
-  .movie-list-item {
-    flex-wrap: wrap;
-  }
-
-  .movie-list-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
+.btn-icon.btn-watchlist.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
+
+/* ✅ Profile page uses the same movie-grid from movies.css */
+/* No overrides needed - let movies.css handle the grid */

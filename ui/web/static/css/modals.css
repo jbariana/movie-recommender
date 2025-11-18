@@ -111,3 +111,35 @@
   background: #0c1a2a;
   color: var(--text);
 }
+
+.rating-modal-quick-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-quick-action {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #1a2532;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 120ms ease;
+  font-size: 0.9rem;
+}
+
+.btn-quick-action:hover {
+  background: var(--card);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.btn-quick-action.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #021019;
+}

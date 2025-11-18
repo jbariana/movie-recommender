@@ -3,14 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Profile • Movie Recommender</title>
+    <title>Search Results • Movie Recommender</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
-    />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/profile.css') }}"
     />
   </head>
   <body>
@@ -21,9 +17,7 @@
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
           <div class="nav-left">
             <a href="{{ url_for('index') }}" class="nav-tab">Home</a>
-            <a href="{{ url_for('profile_page') }}" class="nav-tab active"
-              >Profile</a
-            >
+            <a href="{{ url_for('profile_page') }}" class="nav-tab">Profile</a>
             <a href="{{ url_for('browse_page') }}" class="nav-tab">Browse</a>
           </div>
 
@@ -33,6 +27,7 @@
                 id="search_input"
                 type="text"
                 placeholder="Search movies"
+                value="{{ query or '' }}"
               />
               <button id="search_button" type="button">Search</button>
             </div>
@@ -62,51 +57,15 @@
     </header>
 
     <main class="container">
-      <!-- ✅ Profile Header -->
-      <div class="profile-header">
-        <div class="profile-avatar" id="profile-avatar">?</div>
-        <div class="profile-info">
-          <h1 class="profile-username" id="profile-username">Loading...</h1>
-          <div class="profile-stats">
-            <div class="stat-box">
-              <span class="stat-value" id="stat-ratings">0</span>
-              <span class="stat-label">Ratings</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-value" id="stat-watchlist">0</span>
-              <span class="stat-label">Watchlist</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-value" id="stat-favorites">0</span>
-              <span class="stat-label">Favorites</span>
-            </div>
-          </div>
+      <div class="search-results-page">
+        <div class="search-results-header">
+          <h1>Search Results</h1>
+          <p id="search-query-display" class="search-query"></p>
+          <p id="search-count" class="search-count"></p>
         </div>
-      </div>
 
-      <!-- ✅ Profile Tabs -->
-      <div class="profile-tabs">
-        <button class="profile-tab active" data-tab="ratings">
-          My Ratings
-        </button>
-        <button class="profile-tab" data-tab="watchlist">Watchlist</button>
-        <button class="profile-tab" data-tab="favorites">Favorites</button>
-        <button class="profile-tab" data-tab="statistics">Statistics</button>
-      </div>
-
-      <!-- ✅ Tab Content Container -->
-      <div class="profile-content">
-        <div id="ratings-content" class="profile-tab-content active">
-          <p class="loading">Loading ratings...</p>
-        </div>
-        <div id="watchlist-content" class="profile-tab-content">
-          <p class="loading">Loading watchlist...</p>
-        </div>
-        <div id="favorites-content" class="profile-tab-content">
-          <p class="loading">Loading favorites...</p>
-        </div>
-        <div id="statistics-content" class="profile-tab-content">
-          <p class="loading">Loading statistics...</p>
+        <div id="search-results" class="movie-grid">
+          <p class="loading">Loading...</p>
         </div>
       </div>
     </main>
@@ -135,7 +94,7 @@
         </div>
 
         <div class="rating-modal-buttons">
-          <button id="rating-modal-cancel">Close</button>
+          <button id="rating-modal-cancel">Cancel</button>
           <button id="rating-modal-remove" class="hidden">Remove Rating</button>
           <button id="rating-modal-submit" disabled>Save Rating</button>
         </div>
@@ -144,7 +103,7 @@
 
     <script
       type="module"
-      src="{{ url_for('static', filename='js/profile.js') }}"
+      src="{{ url_for('static', filename='js/search-page.js') }}"
     ></script>
   </body>
 </html>

@@ -3,17 +3,22 @@
  * Content-based recommendations + optional filter/sort catalog.
  */
 
-import { isLoggedIn } from "./utils.js";
-import { showRatingModal } from "./ratingModal.js";
+// ✅ Import all necessary functions from shared.js
 import {
   initLoginUI,
   renderLoggedIn,
   renderLoggedOut,
   checkSession,
   setupNavigation,
-  renderMovieTiles,
 } from "./shared.js";
 import { initSearch } from "./search.js";
+import { showRatingModal } from "./ratingModal.js";
+import {
+  getCachedRecommendations,
+  getRecommendations,
+  preloadRecommendations,
+  invalidateCache,
+} from "./recsCache.js";
 
 const outputDiv = document.getElementById("output");
 
@@ -86,6 +91,16 @@ function writeUrlParams(params, replace = false) {
   }
 }
 
+// ✅ Helper to get first genre
+function getFirstGenre(genresString) {
+  if (!genresString) return "";
+  const genres = genresString
+    .split("|")
+    .map((g) => g.trim())
+    .filter((g) => g);
+  return genres.length > 0 ? genres[0] : "";
+}
+
 // ---------------- API helpers for new catalog ----------------
 async function fetchGenres() {
   try {
@@ -116,26 +131,31 @@ async function fetchMoviesPage() {
   return r.json();
 }
 
-// ---- Content-based recommendations with pagination ----
+// ---- Content-based recommendations with caching ----
 async function loadAllContentRecs() {
   try {
-    console.log("Fetching content-based recommendations...");
-    const r = await fetch(`/api/recommendations/content?k=100`, {
-      credentials: "same-origin",
-    });
-    if (!r.ok) {
-      console.error("Content API returned:", r.status);
-      throw new Error(`HTTP ${r.status}`);
+    console.log("📊 Loading content-based recommendations...");
+
+    // Try to get cached recommendations first
+    let recs = getCachedRecommendations();
+
+    if (recs && recs.length > 0) {
+      console.log(`⚡ Using ${recs.length} cached recommendations (instant!)`);
+      return recs;
     }
-    const data = await r.json();
-    console.log("Content recommendations received:", data.items?.length || 0);
-    if (data.error) {
-      console.error("Content API error:", data.error);
+
+    // If not cached, wait for them to load
+    console.log("⏳ Waiting for recommendations to load...");
+    recs = await getRecommendations();
+
+    if (!recs || recs.length === 0) {
+      console.warn("⚠️ No recommendations available");
       return [];
     }
-    return data.items || [];
+
+    return recs;
   } catch (e) {
-    console.error("Failed to load content recommendations:", e);
+    console.error("❌ Failed to load content recommendations:", e);
     return [];
   }
 }
@@ -165,44 +185,49 @@ function renderContentRecsPage() {
   container.className = "browse-container";
 
   const grid = document.createElement("div");
-  grid.style.display = "grid";
-  grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
-  grid.style.gap = "1rem";
+  grid.className = "movie-grid";
 
   for (const m of pageMovies) {
     const card = document.createElement("div");
-    card.style.background = "#0b1220";
-    card.style.border = "1px solid #1f2937";
-    card.style.borderRadius = "12px";
-    card.style.padding = ".75rem";
-    card.style.color = "#e2e8f0";
+    card.className = "movie-tile";
+    card.style.cursor = "pointer";
+
+    // ✅ Use poster_url if available
+    const posterHtml = m.poster_url
+      ? `<img src="${m.poster_url}" alt="${m.title}" class="movie-poster-img" loading="lazy">`
+      : `<div class="movie-poster-tile">🎬</div>`;
+
+    // ✅ Get only first genre
+    const firstGenre = getFirstGenre(m.genres);
+    const metaText = `${m.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
 
     const isSimilarity = typeof m.score === "number" && m.score <= 1.0001;
-    const metricLabel = isSimilarity ? "Similarity" : "Weighted rating";
+    const metricLabel = isSimilarity ? "Similarity" : "Score";
     const metricValue = (m.score ?? 0).toFixed(3);
 
     card.innerHTML = `
-      <div style="font-weight:600;">
-        ${m.title ?? "(untitled)"}${m.year ? " (" + m.year + ")" : ""}
-      </div>
-      <div style="color:#94a3b8;">${m.genres ?? ""}</div>
-      <div style="color:#94a3b8;">${metricLabel}: ${metricValue}</div>
+      ${posterHtml}
+      <div class="movie-tile-title">${m.title ?? "(untitled)"}</div>
+      <div class="movie-tile-meta">${metaText}</div>
+      <div class="movie-tile-meta">${metricLabel}: ${metricValue}</div>
     `;
 
-    card.style.cursor = "pointer";
-    card.setAttribute("role", "button");
-    card.setAttribute("tabindex", "0");
     card.addEventListener("click", () => {
       try {
         showRatingModal(m.movie_id, m.title);
-      } catch {}
+      } catch (err) {
+        console.error("Failed to open rating modal:", err);
+      }
     });
+
     card.addEventListener("keypress", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         try {
           showRatingModal(m.movie_id, m.title);
-        } catch {}
+        } catch (err) {
+          console.error("Failed to open rating modal:", err);
+        }
       }
     });
 
@@ -262,9 +287,12 @@ async function loadContentRecs() {
   mode = "recs";
   pager.style.display = "none";
   metaSpan.textContent = "";
+
+  // Show loading state (will be instant if cached)
   outputDiv.innerHTML = '<div class="loading">Finding picks for you…</div>';
 
   const recs = await loadAllContentRecs();
+
   if (recs.length === 0) {
     outputDiv.innerHTML =
       '<div class="info-message">No recommendations available. Try rating some movies first!</div>';
@@ -282,39 +310,45 @@ function renderCatalog(items, page, total) {
   container.className = "browse-container";
 
   const grid = document.createElement("div");
-  grid.style.display = "grid";
-  grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
-  grid.style.gap = "1rem";
+  grid.className = "movie-grid";
 
   for (const m of items) {
     const card = document.createElement("div");
-    card.style.background = "#0b1220";
-    card.style.border = "1px solid #1f2937";
-    card.style.borderRadius = "12px";
-    card.style.padding = ".75rem";
-    card.style.color = "#e2e8f0";
+    card.className = "movie-tile";
+    card.style.cursor = "pointer";
+
+    // ✅ Use poster_url if available
+    const posterHtml = m.poster_url
+      ? `<img src="${m.poster_url}" alt="${m.title}" class="movie-poster-img" loading="lazy">`
+      : `<div class="movie-poster-tile">🎬</div>`;
+
+    // ✅ Get only first genre
+    const firstGenre = getFirstGenre(m.genres);
+    const metaText = `${m.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
+
     card.innerHTML = `
-      <div style="font-weight:600;">${m.title ?? "(untitled)"}${
-      m.year ? " (" + m.year + ")" : ""
-    }</div>
-      <div style="color:#94a3b8;">${m.genres ?? ""}</div>
-      <div style="color:#94a3b8;">Avg ★ ${(m.avg_rating ?? 0).toFixed(2)}</div>
+      ${posterHtml}
+      <div class="movie-tile-title">${m.title ?? "(untitled)"}</div>
+      <div class="movie-tile-meta">${metaText}</div>
+      <div class="movie-tile-rating">★ ${(m.avg_rating ?? 0).toFixed(2)}</div>
     `;
 
-    card.style.cursor = "pointer";
-    card.setAttribute("role", "button");
-    card.setAttribute("tabindex", "0");
     card.addEventListener("click", () => {
       try {
         showRatingModal(m.movie_id, m.title);
-      } catch {}
+      } catch (err) {
+        console.error("Failed to open rating modal:", err);
+      }
     });
+
     card.addEventListener("keypress", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         try {
           showRatingModal(m.movie_id, m.title);
-        } catch {}
+        } catch (err) {
+          console.error("Failed to open rating modal:", err);
+        }
       }
     });
 
@@ -351,6 +385,11 @@ async function init() {
   const username = await checkSession();
   if (username) {
     renderLoggedIn(username);
+
+    // 🔥 Preload recommendations in the background immediately after login
+    preloadRecommendations().catch((err) => {
+      console.warn("Background preload failed:", err);
+    });
   } else {
     renderLoggedOut();
   }
@@ -387,13 +426,9 @@ async function init() {
     outputDiv.innerHTML = '<p class="loading">Loading recommendations...</p>';
     metaSpan && (metaSpan.textContent = "");
     pager && (pager.style.display = "none");
-    loadContentRecs().catch((err) => {
-      console.error("Failed to load recommendations:", err);
-      outputDiv.innerHTML =
-        '<p class="error-message">Failed to load recommendations. Please try again.</p>';
-    });
+    await loadContentRecs();
   } else {
-    // Logged-out & no genre: show catalog first page
+    // Not logged in: show catalog
     await loadCatalogPage();
   }
 
@@ -419,7 +454,7 @@ async function init() {
     metaSpan && (metaSpan.textContent = "");
     // Clean the URL and go back to recs if logged in, else catalog
     writeUrlParams({ genre: "", page: 1 }, true);
-    if (isLoggedIn()) {
+    if (username) {
       loadContentRecs();
     } else {
       loadCatalogPage();
@@ -462,16 +497,26 @@ async function init() {
     state.page = Number.isFinite(p.page) && p.page > 0 ? p.page : 1;
     if (state.genre || mode === "catalog") {
       loadCatalogPage();
-    } else if (isLoggedIn()) {
-      loadContentRecs();
     } else {
-      loadCatalogPage();
+      loadContentRecs();
+    }
+  });
+
+  // Listen for rating updates to invalidate cache
+  window.addEventListener("ratingUpdated", () => {
+    console.log("🔄 Rating updated - invalidating cache");
+    invalidateCache();
+    // Preload new recommendations in background
+    if (username) {
+      preloadRecommendations();
     }
   });
 
   // Also refresh recs on login event
   window.addEventListener("userLoggedIn", async () => {
     await fetchGenres();
+    // Preload immediately
+    preloadRecommendations();
     loadContentRecs();
   });
 }

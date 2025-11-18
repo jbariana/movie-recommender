@@ -10,7 +10,8 @@
   }
 
   .movie-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); /* ✅ Smaller on medium screens */
+    gap: 12px;
   }
 }
 
@@ -20,7 +21,13 @@
   }
 
   .movie-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); /* ✅ Even smaller on phones */
+    gap: 10px;
+  }
+
+  .movie-poster-tile,
+  .movie-poster-img {
+    height: 150px; /* ✅ Shorter posters on mobile */
   }
 
   .welcome-section {
@@ -31,5 +38,12 @@
   .btn-secondary {
     padding: 0.6rem 1.5rem;
     font-size: 0.9rem;
+  }
+}
+
+/* ✅ Add larger screen optimization */
+@media (min-width: 1400px) {
+  .movie-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* More columns on big screens */
   }
 }

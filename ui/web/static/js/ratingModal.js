@@ -1,289 +1,361 @@
 /**
  * ratingModal.js
- * Star rating modal + favorite + watchlist checkboxes.
- *
- * Works from BOTH Browse and Profile:
- *  - Saves rating through /api/button-click (add_rating_submit)
- *  - Updates favorites/watchlist in localStorage per user
- *  - Dispatches a "ratingUpdated" event so profile.js can refresh
+ * Handles the movie rating modal UI
  */
 
-// main output area used on Browse page (safe if it doesn't exist)
-const outputDiv = document.getElementById("output");
+import { isLoggedIn } from "./utils.js";
+import { invalidateCache, preloadRecommendations } from "./recsCache.js";
 
-// ---------- Create modal DOM once ----------
-const ratingModal = document.createElement("div");
-ratingModal.id = "rating-modal";
-ratingModal.className = "rating-modal hidden";
-ratingModal.innerHTML = `
-  <div class="rating-modal-content">
-    <h3 id="rating-modal-title">Rate Movie</h3>
-
-    <div class="rating-modal-flags">
-      <label>
-        <input type="checkbox" id="rating-favorite" />
-        ♥ Favorited
-      </label>
-      <label style="margin-left: 0.75rem;">
-        <input type="checkbox" id="rating-watchlist" />
-        In Watchlist
-      </label>
-    </div>
-
-    <div class="star-rating">
-      <span class="star" data-value="1">★</span>
-      <span class="star" data-value="2">★</span>
-      <span class="star" data-value="3">★</span>
-      <span class="star" data-value="4">★</span>
-      <span class="star" data-value="5">★</span>
-    </div>
-
-    <div class="rating-modal-buttons">
-      <button id="rating-modal-submit">Submit</button>
-      <button id="rating-modal-cancel">Cancel</button>
-    </div>
-  </div>
-`;
-document.body.appendChild(ratingModal);
-
-// cache elements
-const favoriteCheckbox = document.getElementById("rating-favorite");
-const watchlistCheckbox = document.getElementById("rating-watchlist");
-const submitBtn = document.getElementById("rating-modal-submit");
-const cancelBtn = document.getElementById("rating-modal-cancel");
-
-// ---------- State ----------
 let currentMovieId = null;
 let currentMovieTitle = null;
+let selectedRating = 0;
+let existingRating = null;
 
-// ---------- Helpers: per-user storage ----------
-function getCurrentUsername() {
-  const el = document.querySelector(".login-status b");
-  return el ? el.textContent.trim() : null;
-}
+const modal = document.getElementById("rating-modal");
+const modalTitle = document.getElementById("rating-modal-title");
+const stars = document.querySelectorAll(".star");
+const submitBtn = document.getElementById("rating-modal-submit");
+const removeBtn = document.getElementById("rating-modal-remove");
+const cancelBtn = document.getElementById("rating-modal-cancel");
+const watchlistBtn = document.getElementById("rating-modal-watchlist");
+const favoriteBtn = document.getElementById("rating-modal-favorite");
 
-function favKey() {
-  const u = getCurrentUsername();
-  return u ? `favorites:${u}` : "favorites";
-}
-function wlKey() {
-  const u = getCurrentUsername();
-  return u ? `watchlist:${u}` : "watchlist";
-}
-
-function loadList(key, fallback = []) {
+// ✅ Helper to get current username from session
+async function getCurrentUsername() {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    const res = await fetch("/session", { credentials: "same-origin" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.username || null;
   } catch {
-    return fallback;
+    return null;
   }
 }
 
-function saveList(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore quota errors etc.
-  }
-}
+// Star hover/click handlers
+stars.forEach((star, index) => {
+  star.addEventListener("mouseenter", () => {
+    updateStarDisplay(index + 1);
+  });
 
-function movieInList(list, movieId) {
-  return list.some((m) => String(m.movie_id) === String(movieId));
-}
+  star.addEventListener("click", () => {
+    selectedRating = index + 1;
+    updateStarDisplay(selectedRating);
+    submitBtn.disabled = false;
+  });
+});
 
-function upsertMovie(list, movieId, title, rating) {
-  const idx = list.findIndex((m) => String(m.movie_id) === String(movieId));
-  const base = { movie_id: movieId, title: title || "Untitled" };
-  if (rating != null) base.rating = rating;
+// Reset stars on mouse leave
+document.querySelector(".star-rating")?.addEventListener("mouseleave", () => {
+  updateStarDisplay(selectedRating);
+});
 
-  if (idx >= 0) {
-    list[idx] = { ...list[idx], ...base };
-  } else {
-    list.push(base);
-  }
-}
-
-function removeMovie(list, movieId) {
-  return list.filter((m) => String(m.movie_id) !== String(movieId));
-}
-
-// ---------- Star UI helpers ----------
-function clearStarState() {
-  ratingModal
-    .querySelectorAll(".star")
-    .forEach((s) => s.classList.remove("selected", "hover"));
-}
-
-function applyHover(value) {
-  ratingModal.querySelectorAll(".star").forEach((s) => {
-    const v = parseInt(s.dataset.value, 10);
-    s.classList.toggle("hover", v <= value);
+function updateStarDisplay(rating) {
+  stars.forEach((star, index) => {
+    star.classList.toggle("selected", index < rating);
+    star.classList.toggle("hover", index < rating);
   });
 }
 
-function selectStars(value) {
-  ratingModal.querySelectorAll(".star").forEach((s) => {
-    const v = parseInt(s.dataset.value, 10);
-    s.classList.toggle("selected", v <= value);
-  });
-}
-
-function getSelectedRating() {
-  const selected = ratingModal.querySelectorAll(".star.selected");
-  return selected.length;
-}
-
-// ---------- Public API ----------
-export function showRatingModal(movieId, movieTitle) {
-  currentMovieId = movieId;
-  currentMovieTitle = movieTitle;
-
-  // title
-  document.getElementById(
-    "rating-modal-title"
-  ).textContent = `Rate: ${movieTitle}`;
-
-  // reset stars
-  clearStarState();
-
-  // pre-check favorite / watchlist based on storage
-  const favs = loadList(favKey(), []);
-  const wls = loadList(wlKey(), []);
-  favoriteCheckbox.checked = movieInList(favs, movieId);
-  watchlistCheckbox.checked = movieInList(wls, movieId);
-
-  // show modal
-  ratingModal.classList.remove("hidden");
-}
-
-// ---------- Hide modal ----------
-function hideRatingModal() {
-  ratingModal.classList.add("hidden");
-  currentMovieId = null;
-  currentMovieTitle = null;
-}
-
-// ---------- Star interactions ----------
-ratingModal.addEventListener("mouseover", (e) => {
-  if (e.target.classList.contains("star")) {
-    const value = parseInt(e.target.dataset.value, 10);
-    applyHover(value);
-  }
-});
-
-ratingModal.addEventListener("mouseout", (e) => {
-  if (e.target.classList.contains("star")) {
-    ratingModal
-      .querySelectorAll(".star")
-      .forEach((s) => s.classList.remove("hover"));
-  }
-});
-
-ratingModal.addEventListener("click", (e) => {
-  if (e.target.classList.contains("star")) {
-    const value = parseInt(e.target.dataset.value, 10);
-    selectStars(value);
-  }
-});
-
-// ---------- Submit ----------
-submitBtn.addEventListener("click", async () => {
-  if (!currentMovieId) {
-    hideRatingModal();
+// Submit rating
+submitBtn?.addEventListener("click", async () => {
+  const username = await getCurrentUsername();
+  if (!username) {
+    alert("Please log in to rate movies.");
     return;
   }
 
-  const rating = getSelectedRating();
-  if (rating === 0) {
-    alert("Please select a rating");
+  if (selectedRating === 0) {
+    alert("Please select a rating.");
     return;
   }
 
-  const favChecked = favoriteCheckbox.checked;
-  const wlChecked = watchlistCheckbox.checked;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Saving...";
 
   try {
-    const res = await fetch("/api/button-click", {
+    const response = await fetch("/api/button-click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({
         button: "add_rating_submit",
         movie_id: currentMovieId,
-        rating: rating,
+        rating: selectedRating,
       }),
     });
 
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { text };
-    }
+    const data = await response.json();
 
-    if (!res.ok || data?.error || data?.ok === false) {
-      if (outputDiv) {
-        outputDiv.textContent =
-          data?.error || data?.message || `Server error (${res.status})`;
-      }
-      hideRatingModal();
+    if (!response.ok || data.error) {
+      alert(data.error || "Failed to save rating");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Save Rating";
       return;
     }
 
-    // --- update favorites / watchlist in localStorage ---
-    let favs = loadList(favKey(), []);
-    let wls = loadList(wlKey(), []);
+    // Invalidate cache and preload new recommendations
+    invalidateCache();
+    preloadRecommendations(); // Start loading in background
 
-    if (favChecked) {
-      upsertMovie(favs, currentMovieId, currentMovieTitle, rating);
-    } else {
-      favs = removeMovie(favs, currentMovieId);
-    }
-
-    if (wlChecked) {
-      upsertMovie(wls, currentMovieId, currentMovieTitle, rating);
-    } else {
-      wls = removeMovie(wls, currentMovieId);
-    }
-
-    saveList(favKey(), favs);
-    saveList(wlKey(), wls);
-
-    // notify profile.js so it can refresh without reload
     window.dispatchEvent(
       new CustomEvent("ratingUpdated", {
         detail: {
           movie_id: currentMovieId,
-          rating,
-          isFavorite: favChecked,
-          inWatchlist: wlChecked,
+          rating: selectedRating,
+          title: currentMovieTitle,
         },
       })
     );
 
-    if (outputDiv) {
-      outputDiv.textContent = data.message || "Rating saved.";
-    }
-
-    hideRatingModal();
-  } catch (err) {
-    console.error("Network error adding rating:", err);
-    if (outputDiv) {
-      outputDiv.textContent = "Error contacting backend.";
-    }
-    hideRatingModal();
+    closeModal();
+  } catch (error) {
+    console.error("Failed to save rating:", error);
+    alert("Failed to save rating. Please try again.");
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Save Rating";
   }
 });
 
-// ---------- Cancel + click outside ----------
-cancelBtn.addEventListener("click", () => {
-  hideRatingModal();
-});
+// Remove rating
+removeBtn?.addEventListener("click", async () => {
+  if (!confirm(`Remove your rating for "${currentMovieTitle}"?`)) {
+    return;
+  }
 
-ratingModal.addEventListener("click", (e) => {
-  if (e.target === ratingModal) {
-    hideRatingModal();
+  removeBtn.disabled = true;
+  removeBtn.textContent = "Removing...";
+
+  try {
+    // ✅ Use remove_rating (from your ratings.js)
+    const response = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        button: "remove_rating",
+        movie_id: currentMovieId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error || "Failed to remove rating");
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("ratingUpdated", {
+        detail: { movie_id: currentMovieId, rating: 0 },
+      })
+    );
+
+    closeModal();
+  } catch (error) {
+    console.error("Failed to remove rating:", error);
+    alert("Failed to remove rating. Please try again.");
+    removeBtn.disabled = false;
+    removeBtn.textContent = "Remove Rating";
   }
 });
+
+// Add to watchlist (no rating required)
+watchlistBtn?.addEventListener("click", async () => {
+  const username = await getCurrentUsername();
+  if (!username) {
+    alert("Please log in first.");
+    return;
+  }
+  toggleWatchlist(currentMovieId, currentMovieTitle, username);
+});
+
+// Add to favorites (no rating required)
+favoriteBtn?.addEventListener("click", async () => {
+  const username = await getCurrentUsername();
+  if (!username) {
+    alert("Please log in first.");
+    return;
+  }
+  toggleFavorite(currentMovieId, currentMovieTitle, username);
+});
+
+function toggleWatchlist(movieId, title, username) {
+  const key = `watchlist:${username}`;
+  let watchlist = [];
+  try {
+    const stored = localStorage.getItem(key);
+    watchlist = stored ? JSON.parse(stored) : [];
+  } catch {}
+
+  const idx = watchlist.findIndex(
+    (m) => String(m.movie_id) === String(movieId)
+  );
+
+  if (idx >= 0) {
+    watchlist.splice(idx, 1);
+    watchlistBtn.classList.remove("active");
+    watchlistBtn.textContent = "🔖 Add to Watchlist";
+  } else {
+    watchlist.push({
+      movie_id: movieId,
+      title: title,
+      timestamp: Date.now(),
+    });
+    watchlistBtn.classList.add("active");
+    watchlistBtn.textContent = "🔖 In Watchlist";
+  }
+
+  localStorage.setItem(key, JSON.stringify(watchlist));
+
+  window.dispatchEvent(
+    new CustomEvent("watchlistUpdated", {
+      detail: { movie_id: movieId },
+    })
+  );
+}
+
+function toggleFavorite(movieId, title, username) {
+  const key = `favorites:${username}`;
+  let favorites = [];
+  try {
+    const stored = localStorage.getItem(key);
+    favorites = stored ? JSON.parse(stored) : [];
+  } catch {}
+
+  const idx = favorites.findIndex(
+    (m) => String(m.movie_id) === String(movieId)
+  );
+
+  if (idx >= 0) {
+    favorites.splice(idx, 1);
+    favoriteBtn.classList.remove("active");
+    favoriteBtn.textContent = "♥ Add to Favorites";
+  } else {
+    favorites.push({
+      movie_id: movieId,
+      title: title,
+      timestamp: Date.now(),
+    });
+    favoriteBtn.classList.add("active");
+    favoriteBtn.textContent = "♥ Favorited";
+  }
+
+  localStorage.setItem(key, JSON.stringify(favorites));
+
+  window.dispatchEvent(
+    new CustomEvent("favoritesUpdated", {
+      detail: { movie_id: movieId },
+    })
+  );
+}
+
+// Cancel button
+cancelBtn?.addEventListener("click", closeModal);
+
+// Close on background click
+modal?.addEventListener("click", (e) => {
+  if (e.target === modal) {
+    closeModal();
+  }
+});
+
+// Close on Escape key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+    closeModal();
+  }
+});
+
+function closeModal() {
+  modal.classList.add("hidden");
+  selectedRating = 0;
+  existingRating = null;
+  currentMovieId = null;
+  currentMovieTitle = null;
+  updateStarDisplay(0);
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Save Rating";
+  removeBtn.textContent = "Remove Rating";
+  removeBtn.classList.add("hidden");
+  watchlistBtn.classList.remove("active");
+  favoriteBtn.classList.remove("active");
+  watchlistBtn.textContent = "🔖 Add to Watchlist";
+  favoriteBtn.textContent = "♥ Add to Favorites";
+}
+
+export async function showRatingModal(movieId, movieTitle) {
+  const username = await getCurrentUsername();
+  if (!username) {
+    alert("Please log in to rate movies.");
+    return;
+  }
+
+  currentMovieId = movieId;
+  currentMovieTitle = movieTitle;
+  selectedRating = 0;
+  existingRating = null;
+
+  modalTitle.textContent = movieTitle || `Movie ${movieId}`;
+
+  // Check if user already rated this movie
+  try {
+    const response = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ button: "view_ratings_button" }),
+    });
+
+    const data = await response.json();
+    const ratings = data.ratings || [];
+    const existing = ratings.find(
+      (r) => String(r.movie_id) === String(movieId)
+    );
+
+    if (existing) {
+      existingRating = existing.rating;
+      selectedRating = existing.rating;
+      updateStarDisplay(selectedRating);
+      removeBtn.classList.remove("hidden");
+      submitBtn.disabled = false;
+    } else {
+      removeBtn.classList.add("hidden");
+      submitBtn.disabled = true;
+    }
+  } catch (error) {
+    console.error("Failed to check existing rating:", error);
+  }
+
+  // Check watchlist/favorites status
+  try {
+    const wlKey = `watchlist:${username}`;
+    const favKey = `favorites:${username}`;
+    const watchlist = JSON.parse(localStorage.getItem(wlKey) || "[]");
+    const favorites = JSON.parse(localStorage.getItem(favKey) || "[]");
+
+    const inWatchlist = watchlist.some(
+      (m) => String(m.movie_id) === String(movieId)
+    );
+    const inFavorites = favorites.some(
+      (m) => String(m.movie_id) === String(movieId)
+    );
+
+    if (inWatchlist) {
+      watchlistBtn.classList.add("active");
+      watchlistBtn.textContent = "🔖 In Watchlist";
+    } else {
+      watchlistBtn.classList.remove("active");
+      watchlistBtn.textContent = "🔖 Add to Watchlist";
+    }
+
+    if (inFavorites) {
+      favoriteBtn.classList.add("active");
+      favoriteBtn.textContent = "♥ Favorited";
+    } else {
+      favoriteBtn.classList.remove("active");
+      favoriteBtn.textContent = "♥ Add to Favorites";
+    }
+  } catch {}
+
+  modal.classList.remove("hidden");
+}

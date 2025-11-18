@@ -327,3 +327,48 @@ def api_content_recs():
 
     items = recommend_titles_for_user(user_id=user_id, k=k)
     return jsonify({"user_id": user_id, "items": items}), 200
+
+@api_bp.route("/api/movies/search", methods=["GET"])
+def search_movies():
+    """
+    Search movies by title (fuzzy matching)
+    """
+    query = request.args.get("q", "").strip()
+    limit = int(request.args.get("limit", 20))
+    
+    if not query or len(query) < 2:
+        return jsonify({
+            "results": [],
+            "count": 0,
+            "query": query
+        })
+    
+    from database.db_query import search_movies_by_title
+    
+    try:
+        results = search_movies_by_title(query, limit=limit)
+        return jsonify({
+            "results": results,
+            "count": len(results),
+            "query": query
+        })
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/api/movies/<int:movie_id>", methods=["GET"])
+def get_movie_details(movie_id):
+    """
+    Get details for a specific movie by ID
+    """
+    from database.db_query import get_movie_by_id
+    
+    try:
+        movie = get_movie_by_id(movie_id)
+        if not movie:
+            return jsonify({"error": "Movie not found"}), 404
+        
+        return jsonify(movie)
+    except Exception as e:
+        logger.error(f"Failed to get movie {movie_id}: {e}")
+        return jsonify({"error": str(e)}), 500

@@ -1,182 +1,139 @@
 /**
  * search.js
- * unified search with autocomplete and full results display
+ * Movie search with autocomplete
  */
 
 import { showRatingModal } from "./ratingModal.js";
-import { renderMovieTiles } from "./shared.js";
 
-let searchAutocompleteTimeout = null;
-let searchDropdown = null;
+let searchTimeout = null;
 
-//create or return existing search dropdown
-function createSearchDropdown(searchInput) {
-  if (searchDropdown) return searchDropdown;
+export function initSearch(searchInput, searchButton, outputDiv) {
+  if (!searchInput || !searchButton) return;
 
-  searchDropdown = document.createElement("div");
-  searchDropdown.className = "autocomplete-dropdown";
-  searchDropdown.id = "search-autocomplete-dropdown";
-  searchDropdown.style.position = "absolute";
-  searchDropdown.style.width = searchInput.offsetWidth + "px";
+  // Autocomplete dropdown
+  const dropdown = document.createElement("div");
+  dropdown.className = "autocomplete-dropdown";
+  searchInput.parentElement.style.position = "relative";
+  searchInput.parentElement.appendChild(dropdown);
 
-  const searchContainer = searchInput.parentElement;
-  searchContainer.style.position = "relative";
-  searchContainer.appendChild(searchDropdown);
+  let selectedIndex = -1;
 
-  return searchDropdown;
-}
+  // Hide dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.classList.remove("visible");
+    }
+  });
 
-//setup autocomplete dropdown on search input
-export function initSearchAutocomplete(searchInput) {
-  if (!searchInput) return;
-
-  const dropdown = createSearchDropdown(searchInput);
-
-  searchInput.addEventListener("input", async (e) => {
-    const query = e.target.value.trim();
-    clearTimeout(searchAutocompleteTimeout);
+  // Search input typing (autocomplete)
+  searchInput.addEventListener("input", () => {
+    const query = searchInput.value.trim();
 
     if (query.length < 2) {
       dropdown.classList.remove("visible");
-      dropdown.innerHTML = "";
       return;
     }
 
-    //debounce 300ms
-    searchAutocompleteTimeout = setTimeout(async () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
       try {
-        const res = await fetch("/api/button-click", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ button: "search", query }),
-          credentials: "same-origin",
-        });
-
-        if (!res.ok) return;
+        const res = await fetch(
+          `/api/movies/search?q=${encodeURIComponent(query)}&limit=8`
+        );
+        if (!res.ok) throw new Error("Search failed");
 
         const data = await res.json();
-        const movies = data?.ratings || [];
+        const movies = data.results || [];
 
-        if (!movies.length) {
+        if (movies.length === 0) {
           dropdown.innerHTML =
-            "<div class='autocomplete-item'>No results found</div>";
+            '<div class="autocomplete-item" style="cursor:default;color:var(--muted);">No results</div>';
           dropdown.classList.add("visible");
           return;
         }
 
-        //render autocomplete suggestions
-        dropdown.innerHTML = movies
-          .slice(0, 10)
-          .map(
-            (m) => `
-          <div class="autocomplete-item" data-movie-id="${m.movie_id}">
-            <div class="autocomplete-item-title">${m.title}</div>
-            <div class="autocomplete-item-meta">${m.year || ""}${
-              m.genres ? ` • ${m.genres}` : ""
-            }</div>
-          </div>
-        `
-          )
-          .join("");
+        dropdown.innerHTML = "";
+        movies.forEach((m, idx) => {
+          const item = document.createElement("div");
+          item.className = "autocomplete-item";
+          item.dataset.index = idx;
+          item.innerHTML = `
+            <div class="autocomplete-item-title">${m.title || "Untitled"}</div>
+            <div class="autocomplete-item-meta">${m.year || ""} ${
+            m.genres ? "• " + m.genres : ""
+          }</div>
+          `;
 
-        //handle clicks on suggestions
-        dropdown.querySelectorAll(".autocomplete-item").forEach((item) => {
           item.addEventListener("click", () => {
-            const movieId = item.dataset.movieId;
-            const title = item.querySelector(
-              ".autocomplete-item-title"
-            ).textContent;
+            searchInput.value = "";
             dropdown.classList.remove("visible");
-            searchInput.value = title;
-            showRatingModal(movieId, title);
+            showRatingModal(m.movie_id, m.title);
           });
+
+          dropdown.appendChild(item);
         });
 
         dropdown.classList.add("visible");
+        selectedIndex = -1;
       } catch (err) {
-        console.error("Search autocomplete error:", err);
+        console.error("Autocomplete failed:", err);
+        dropdown.classList.remove("visible");
       }
     }, 300);
   });
-}
 
-//execute full search and display results in grid
-export async function executeSearch(query, outputDiv) {
-  if (!query || !outputDiv) return;
-
-  //close autocomplete dropdown
-  if (searchDropdown) {
-    searchDropdown.classList.remove("visible");
-  }
-
-  outputDiv.innerHTML = '<div class="loading">Searching...</div>';
-
-  try {
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ button: "search", query }),
-      credentials: "same-origin",
-    });
-
-    const data = await res.json();
-    const movies = data?.ratings || [];
-
-    if (!movies.length) {
-      outputDiv.innerHTML = '<div class="info-message">No results found.</div>';
-    } else {
-      const grid = renderMovieTiles(movies);
-      outputDiv.innerHTML = "";
-      outputDiv.appendChild(grid);
-    }
-  } catch (err) {
-    console.error("Search error:", err);
-    outputDiv.innerHTML = '<div class="error-message">Search failed.</div>';
-  }
-}
-
-//setup search button and enter key handlers
-export function initSearchHandlers(searchInput, searchButton, outputDiv) {
-  if (!searchInput || !searchButton || !outputDiv) return;
-
-  const handleSearch = () => {
-    const query = searchInput.value.trim();
-    if (!query) {
-      outputDiv.textContent = "Enter a search term.";
-      return;
-    }
-    executeSearch(query, outputDiv);
-  };
-
-  searchButton.addEventListener("click", (e) => {
-    e.preventDefault();
-    handleSearch();
-  });
-
+  // Keyboard navigation in dropdown
   searchInput.addEventListener("keydown", (e) => {
+    const items = dropdown.querySelectorAll(".autocomplete-item");
+
+    if (items.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateDropdownSelection(items, selectedIndex);
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updateDropdownSelection(items, selectedIndex);
+        return;
+      } else if (e.key === "Escape") {
+        dropdown.classList.remove("visible");
+        selectedIndex = -1;
+        return;
+      }
+    }
+
+    // Enter key - navigate to search page
     if (e.key === "Enter") {
       e.preventDefault();
-      handleSearch();
+
+      if (selectedIndex >= 0 && selectedIndex < items.length) {
+        // Click the selected autocomplete item
+        items[selectedIndex].click();
+      } else {
+        // Navigate to search results page
+        const query = searchInput.value.trim();
+        if (query.length >= 2) {
+          window.location.href = `/search?q=${encodeURIComponent(query)}`;
+        }
+      }
+    }
+  });
+
+  // Search button click - navigate to search page
+  searchButton.addEventListener("click", () => {
+    const query = searchInput.value.trim();
+    dropdown.classList.remove("visible");
+
+    if (query.length >= 2) {
+      window.location.href = `/search?q=${encodeURIComponent(query)}`;
     }
   });
 }
 
-//close dropdown when clicking outside
-export function initSearchClickOutside(searchInput) {
-  document.addEventListener("click", (e) => {
-    if (
-      searchDropdown &&
-      searchInput &&
-      !searchInput.parentElement.contains(e.target)
-    ) {
-      searchDropdown.classList.remove("visible");
-    }
+function updateDropdownSelection(items, selectedIndex) {
+  items.forEach((item, idx) => {
+    item.classList.toggle("selected", idx === selectedIndex);
   });
-}
-
-//initialize all search functionality
-export function initSearch(searchInput, searchButton, outputDiv) {
-  initSearchAutocomplete(searchInput);
-  initSearchHandlers(searchInput, searchButton, outputDiv);
-  initSearchClickOutside(searchInput);
 }

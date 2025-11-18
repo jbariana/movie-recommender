@@ -25,18 +25,18 @@ export function renderLoggedIn(username) {
     <small id="login_status" class="login-status">Logged in</small>
   `;
 
-  document.getElementById("logout_button")?.addEventListener("click", async () => {
-    await fetch("/logout", { method: "POST", credentials: "same-origin" });
-    window.location.href = "/";
-  });
+  document
+    .getElementById("logout_button")
+    ?.addEventListener("click", async () => {
+      await fetch("/logout", { method: "POST", credentials: "same-origin" });
+      window.location.href = "/";
+    });
 }
 
 export function renderLoggedOut() {
   const loginForm = document.getElementById("login_form");
   if (!loginForm) return;
 
-  // Keep your old markup, but if you’ve disabled /login on the backend,
-  // show links to the auth pages instead of posting to /login.
   loginForm.innerHTML = `
     <a class="nav-tab" href="/auth/login">Login</a>
     <a class="nav-tab" href="/auth/signup">Sign&nbsp;up</a>
@@ -80,59 +80,63 @@ export function setupNavigation() {
   });
 }
 
+// ✅ Helper to get first genre from pipe-separated string
+function getFirstGenre(genresString) {
+  if (!genresString) return "";
+  const genres = genresString
+    .split("|")
+    .map((g) => g.trim())
+    .filter((g) => g);
+  return genres.length > 0 ? genres[0] : "";
+}
+
 // ------------------------------
 // Movie grid renderer
 // ------------------------------
-export function renderMovieTiles(movies) {
+export function renderMovieTiles(movies, container) {
+  if (!movies || movies.length === 0) {
+    container.innerHTML = '<p class="info-message">No movies found.</p>';
+    return;
+  }
+
   const grid = document.createElement("div");
   grid.className = "movie-grid";
 
   movies.forEach((movie) => {
     const tile = document.createElement("div");
     tile.className = "movie-tile";
-    tile.dataset.movieId = movie.movie_id;
 
-    let posterEl;
-    if (movie.poster_url) {
-      posterEl = document.createElement("img");
-      posterEl.className = "movie-poster-img";
-      posterEl.src = movie.poster_url;
-      posterEl.alt = movie.title || `ID ${movie.movie_id}`;
-      posterEl.loading = "lazy";
-      posterEl.onerror = function () {
-        this.style.display = "none";
-        const placeholder = document.createElement("div");
-        placeholder.className = "movie-poster-tile";
-        placeholder.textContent = "No Poster";
-        this.parentNode.insertBefore(placeholder, this);
-      };
-    } else {
-      posterEl = document.createElement("div");
-      posterEl.className = "movie-poster-tile";
-      posterEl.textContent = "No Poster";
-    }
+    // ✅ Use poster_url if available, otherwise show placeholder
+    const posterHtml = movie.poster_url
+      ? `<img src="${movie.poster_url}" alt="${movie.title}" class="movie-poster-img" loading="lazy">`
+      : `<div class="movie-poster-tile">🎬</div>`;
 
-    const title = document.createElement("div");
-    title.className = "movie-tile-title";
-    title.textContent = movie.title;
+    // ✅ Get only first genre
+    const firstGenre = getFirstGenre(movie.genres);
+    const metaText = `${movie.year || ""} ${
+      firstGenre ? "• " + firstGenre : ""
+    }`;
 
-    const meta = document.createElement("div");
-    meta.className = "movie-tile-meta";
-    meta.textContent = `${movie.year || ""}${movie.genres ? ` • ${movie.genres}` : ""}`;
+    tile.innerHTML = `
+      ${posterHtml}
+      <div class="movie-tile-title">${movie.title || "Untitled"}</div>
+      <div class="movie-tile-meta">${metaText}</div>
+      ${
+        movie.rating
+          ? `<div class="movie-tile-rating">★ ${movie.rating}/5</div>`
+          : ""
+      }
+    `;
 
-    const rating = document.createElement("div");
-    rating.className = "movie-tile-rating";
-    rating.textContent = movie.rating ? `★ ${Number(movie.rating).toFixed(1)}` : "Unrated";
-
-    tile.append(posterEl, title, meta, rating);
     tile.addEventListener("click", () => {
-      showRatingModal(movie.movie_id, movie.title, movie.rating);
+      showRatingModal(movie.movie_id, movie.title);
     });
 
     grid.appendChild(tile);
   });
 
-  return grid;
+  container.innerHTML = "";
+  container.appendChild(grid);
 }
 
 // ------------------------------
@@ -193,13 +197,11 @@ export async function fireButton(buttonId, extraPayload = {}) {
 
 export function wireHomeActions(outputEl) {
   const statsBtn = document.getElementById("view_statistics_button");
-  const sessBtn  = document.getElementById("check_session_button");
+  const sessBtn = document.getElementById("check_session_button");
 
   if (statsBtn) {
     statsBtn.addEventListener("click", async () => {
       try {
-        // Use the exact id your backend expects in api.api.handle_button_click
-        // Change this string if your handler uses a different button name.
         const data = await fireButton("view_statistics_button");
         renderJSON(outputEl, data, "Rating Statistics");
       } catch (e) {
@@ -214,7 +216,9 @@ export function wireHomeActions(outputEl) {
         const res = await fetch("/session", { credentials: "same-origin" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const title = data?.username ? `Logged in as: ${data.username}` : "No active session";
+        const title = data?.username
+          ? `Logged in as: ${data.username}`
+          : "No active session";
         renderJSON(outputEl, data, title);
       } catch (e) {
         outputEl.innerHTML = `<div class="error-message">Failed to check session: ${e.message}</div>`;
@@ -222,4 +226,3 @@ export function wireHomeActions(outputEl) {
     });
   }
 }
-

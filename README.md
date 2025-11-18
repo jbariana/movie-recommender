@@ -2,15 +2,17 @@
 
 ## Overview
 
-AI-powered movie recommendation system using collaborative filtering on the MovieLens dataset with user ratings stored in PostgreSQL.
+Movie recommender web app using collaborative filtering on the MovieLens dataset with user ratings stored in PostgreSQL. Supports concurrent accesses and unencrypted logins.
 
 ## Features
 
 - Browse and search 9,000+ movies with real-time autocomplete
 - Rate movies with interactive 5-star modal
-- Get AI-powered personalized recommendations using item-item collaborative filtering
+- Interacts w/ a Postgre database for user and movie data.
+- Get machine-learning based personalized recommendations using item-item collaborative filtering.
 - Search: autocomplete dropdown + full results page
-- User profile with complete rating history and statistics
+- User profile with complete rating history, watchlist, favorites, and statistics
+- Basic login (no encryption)
 - Rating statistics with genre insights
 
 ## Installation
@@ -43,7 +45,7 @@ python app.py
 
 Create a .env file in the root directory with: \
 DATABASE_URL=your_postgres_url \
-SECRET_KEY=your_secret_key_here 
+SECRET_KEY=your_secret_key_here
 
 ## License
 

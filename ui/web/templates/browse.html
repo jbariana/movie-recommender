@@ -125,6 +125,38 @@
       {% endif %}
     </main>
 
+    <!-- Rating Modal -->
+    <div id="rating-modal" class="rating-modal hidden">
+      <div class="rating-modal-content">
+        <h3 id="rating-modal-title">Rate Movie</h3>
+        <p class="rating-hint">Click stars to rate (1-5)</p>
+
+        <div class="star-rating">
+          <span class="star" data-rating="1">★</span>
+          <span class="star" data-rating="2">★</span>
+          <span class="star" data-rating="3">★</span>
+          <span class="star" data-rating="4">★</span>
+          <span class="star" data-rating="5">★</span>
+        </div>
+
+        <!-- Add these quick action buttons -->
+        <div class="rating-modal-quick-actions">
+          <button id="rating-modal-watchlist" class="btn-quick-action">
+            🔖 Add to Watchlist
+          </button>
+          <button id="rating-modal-favorite" class="btn-quick-action">
+            ♥ Add to Favorites
+          </button>
+        </div>
+
+        <div class="rating-modal-buttons">
+          <button id="rating-modal-cancel">Close</button>
+          <button id="rating-modal-remove" class="hidden">Remove Rating</button>
+          <button id="rating-modal-submit" disabled>Save Rating</button>
+        </div>
+      </div>
+    </div>
+
     <script
       type="module"
       src="{{ url_for('static', filename='js/browse.js') }}"

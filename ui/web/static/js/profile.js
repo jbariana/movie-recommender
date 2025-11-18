@@ -1,518 +1,489 @@
-// ui/web/static/js/profile.js
-import { checkSession, renderMovieTiles } from "./shared.js";
+/**
+ * profile.js
+ * Profile page functionality
+ */
 
-let currentSortOrder = "date"; // "date" | "rating" | "title"
-let ratingsData = [];
-let favoritesData = [];
-let watchlistData = [];
+import { showRatingModal } from "./ratingModal.js";
 
-// ===== per-user storage =====
-let USERNAME = null;
-const favKey = () => (USERNAME ? `favorites:${USERNAME}` : "favorites");
-const wlKey = () => (USERNAME ? `watchlist:${USERNAME}` : "watchlist");
+let currentUsername = null;
 
-function loadFromStorage(key, fallback = []) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function saveToStorage(key, val) {
-  try {
-    localStorage.setItem(key, JSON.stringify(val));
-  } catch {
-    // ignore
-  }
-}
+// Get DOM elements
+const profileAvatar = document.getElementById("profile-avatar");
+const profileUsername = document.getElementById("profile-username");
+const statRatings = document.getElementById("stat-ratings");
+const statWatchlist = document.getElementById("stat-watchlist");
+const statFavorites = document.getElementById("stat-favorites");
 
-function movieInList(list, movieId) {
-  return list.some((m) => String(m.movie_id) === String(movieId));
+const ratingsContent = document.getElementById("ratings-content");
+const watchlistContent = document.getElementById("watchlist-content");
+const favoritesContent = document.getElementById("favorites-content");
+const statisticsContent = document.getElementById("statistics-content");
+
+// ✅ Helper to get first genre
+function getFirstGenre(genresString) {
+  if (!genresString) return "";
+  const genres = genresString
+    .split("|")
+    .map((g) => g.trim())
+    .filter((g) => g);
+  return genres.length > 0 ? genres[0] : "";
 }
 
-// Merge rating/year/genres from ratingsData into another list (favorites/watchlist)
-function syncListWithRatings(list) {
-  if (!ratingsData.length || !list.length) return list;
-  const merged = list.map((item) => {
-    const match = ratingsData.find(
-      (r) => String(r.movie_id) === String(item.movie_id)
-    );
-    return match ? { ...item, ...match } : item;
-  });
-  return merged;
-}
-
-// ---- tiny helpers -----------------------------------------------------------
-function toast(msg, isError = false) {
-  const el = document.createElement("div");
-  el.className = isError ? "error-message" : "success-message";
-  el.style.marginBottom = "0.75rem";
-  el.textContent = msg;
-  const area = document.getElementById("ratings-list") || document.body;
-  area.prepend(el);
-  setTimeout(() => el.remove(), 2500);
-}
-
-function updateHeaderStats() {
-  const totalEl = document.getElementById("total-ratings");
-  const avgEl = document.getElementById("avg-rating");
-  if (totalEl) totalEl.textContent = ratingsData.length;
-
-  const avg =
-    ratingsData.length > 0
-      ? ratingsData.reduce((s, r) => s + (r.rating || 0), 0) /
-        ratingsData.length
-      : 0;
-  if (avgEl) avgEl.textContent = avg.toFixed(1);
-
-  const favEl = document.getElementById("total-favorites");
-  const wlEl = document.getElementById("total-watchlist");
-  if (favEl) favEl.textContent = favoritesData.length;
-  if (wlEl) wlEl.textContent = watchlistData.length;
-}
-
-// ---- Tab switching ----------------------------------------------------------
-const tabs = document.querySelectorAll(".profile-tab");
-const tabContents = document.querySelectorAll(".profile-tab-content");
-
-function activateTab(tabName) {
-  tabs.forEach((t) => {
-    const active = t.dataset.tab === tabName;
-    t.classList.toggle("active", active);
-  });
-  tabContents.forEach((c) => {
-    c.classList.toggle("active", c.id === `tab-${tabName}`);
-  });
-
-  // lazy load per tab
-  if (tabName === "ratings" && ratingsData.length === 0) {
-    loadRatings();
-  } else if (tabName === "favorites") {
-    loadFavorites();
-  } else if (tabName === "watchlist") {
-    loadWatchlist();
-  } else if (tabName === "statistics") {
-    loadStatistics();
-  }
-}
-
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const targetTab = tab.dataset.tab;
-    activateTab(targetTab);
-    // keep URL in sync (no reload)
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", targetTab);
-    history.replaceState(null, "", url.toString());
-  });
-});
-
-// ---- Sort ratings button ----------------------------------------------------
-document.getElementById("sort-ratings")?.addEventListener("click", () => {
-  if (currentSortOrder === "date") {
-    currentSortOrder = "rating";
-    document.getElementById("sort-ratings").textContent = "Sort by Rating ▼";
-    sortRatings("rating");
-  } else if (currentSortOrder === "rating") {
-    currentSortOrder = "title";
-    document.getElementById("sort-ratings").textContent = "Sort by Title ▼";
-    sortRatings("title");
-  } else {
-    currentSortOrder = "date";
-    document.getElementById("sort-ratings").textContent = "Sort by Date ▼";
-    sortRatings("date");
-  }
-});
-
-function sortRatings(by) {
-  const sorted = [...ratingsData];
-
-  if (by === "date") {
-    sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-  } else if (by === "rating") {
-    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  } else if (by === "title") {
-    sorted.sort((a, b) =>
-      (a.title || "").localeCompare(b.title || "", undefined, {
-        sensitivity: "base",
-      })
-    );
-  }
-
-  ratingsData = sorted;
-  renderRatings();
-}
-
-// ---- Load & render ratings --------------------------------------------------
+// Load ratings
 async function loadRatings() {
-  const container = document.getElementById("ratings-list");
-  container.innerHTML = '<p class="loading">Loading ratings...</p>';
+  ratingsContent.innerHTML = '<p class="loading">Loading ratings...</p>';
 
   try {
     const response = await fetch("/api/button-click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ button: "view_ratings_button" }),
       credentials: "same-origin",
+      body: JSON.stringify({ button: "view_ratings_button" }),
     });
 
     const data = await response.json();
-    ratingsData = data.ratings || [];
+    let ratings = data.ratings || [];
 
-    // sync favorites/watchlist objects with the latest ratings
-    favoritesData = syncListWithRatings(favoritesData);
-    watchlistData = syncListWithRatings(watchlistData);
-    saveToStorage(favKey(), favoritesData);
-    saveToStorage(wlKey(), watchlistData);
+    if (ratings.length === 0) {
+      ratingsContent.innerHTML =
+        '<p class="info-message">You haven\'t rated any movies yet.</p>';
+      return;
+    }
 
-    updateHeaderStats();
-    renderRatings();
+    // ✅ Fetch missing movie details (including poster_url) in parallel
+    const enhancedRatings = await Promise.all(
+      ratings.map(async (rating) => {
+        // If poster_url is missing or null, fetch movie details
+        if (!rating.poster_url) {
+          try {
+            const res = await fetch(`/api/movies/${rating.movie_id}`);
+            if (res.ok) {
+              const movie = await res.json();
+              return {
+                ...rating,
+                poster_url: movie.poster_url,
+                genres: movie.genres || rating.genres,
+                year: movie.year || rating.year,
+              };
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch movie ${rating.movie_id}:`, err);
+          }
+        }
+        return rating;
+      })
+    );
+
+    renderMovieList(enhancedRatings, ratingsContent, "rating");
   } catch (err) {
     console.error("Failed to load ratings:", err);
-    container.innerHTML =
+    ratingsContent.innerHTML =
       '<p class="error-message">Failed to load ratings.</p>';
   }
 }
 
-function renderRatings() {
-  const container = document.getElementById("ratings-list");
+async function loadWatchlist() {
+  const container = document.getElementById("watchlist-content");
+  container.innerHTML = '<p class="loading">Loading watchlist...</p>';
 
-  if (ratingsData.length === 0) {
+  const username = sessionStorage.getItem("username");
+  if (!username) {
     container.innerHTML =
-      '<p class="info-message">No ratings yet. Start rating movies!</p>';
-    updateHeaderStats();
+      '<p class="info-message">Please log in to view watchlist.</p>';
     return;
   }
 
-  container.innerHTML = "";
-
-  ratingsData.forEach((movie) => {
-    const item = document.createElement("div");
-    item.className = "movie-list-item";
-    item.dataset.movieId = movie.movie_id;
-
-    const stars = "★".repeat(Math.floor(movie.rating || 0));
-    const isFavorite = movieInList(favoritesData, movie.movie_id);
-    const inWatchlist = movieInList(watchlistData, movie.movie_id);
-
-    const favClass = `btn-icon favorite${isFavorite ? " active" : ""}`;
-    const wlClass = `btn-icon watchlist${inWatchlist ? " active" : ""}`;
-
-    item.innerHTML = `
-      <div class="movie-list-poster">
-        ${
-          movie.poster_url
-            ? `<img src="${movie.poster_url}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`
-            : "🎬"
-        }
-      </div>
-      <div class="movie-list-info">
-        <div class="movie-list-title">${
-          movie.title || movie.movie || "Untitled"
-        }</div>
-        <div class="movie-list-meta">
-          ${movie.year ? movie.year + " • " : ""}${movie.genres || ""}
-        </div>
-      </div>
-      <div class="movie-list-rating">
-        <span class="rating-stars">${stars}</span>
-        <span class="rating-value">${movie.rating || 0}</span>
-      </div>
-      <div class="movie-list-actions">
-        <button class="${favClass}"  title="Add to favorites" data-movie-id="${
-      movie.movie_id
-    }">♥</button>
-        <button class="${wlClass}"   title="Add to watchlist" data-movie-id="${
-      movie.movie_id
-    }">🔖</button>
-        <button class="btn-icon remove"    title="Remove rating"    data-movie-id="${
-          movie.movie_id
-        }">🗑️</button>
-      </div>
-    `;
-
-    container.appendChild(item);
-  });
-
-  attachActionListeners();
-}
-
-function attachActionListeners() {
-  document.querySelectorAll(".btn-icon.favorite").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleFavorite(btn.dataset.movieId, btn);
-    });
-  });
-
-  document.querySelectorAll(".btn-icon.watchlist").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleWatchlist(btn.dataset.movieId, btn);
-    });
-  });
-
-  document.querySelectorAll(".btn-icon.remove").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await deleteRating(btn.dataset.movieId);
-    });
-  });
-}
-
-async function deleteRating(movieId) {
   try {
-    const res = await fetch("/api/button-click", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ button: "remove_rating", movie_id: movieId }),
-    });
-    const data = await res.json();
+    const key = `watchlist:${username}`;
+    const stored = localStorage.getItem(key);
+    const watchlist = stored ? JSON.parse(stored) : [];
 
-    if (!res.ok || data?.error) {
-      toast(data?.error || `Failed to remove rating for ${movieId}`, true);
+    if (watchlist.length === 0) {
+      container.innerHTML =
+        '<p class="info-message">No movies in watchlist. Add some movies to watch later!</p>';
       return;
     }
 
-    ratingsData = ratingsData.filter(
-      (m) => String(m.movie_id) !== String(movieId)
-    );
-    favoritesData = favoritesData.filter(
-      (m) => String(m.movie_id) !== String(movieId)
-    );
-    watchlistData = watchlistData.filter(
-      (m) => String(m.movie_id) !== String(movieId)
-    );
-    saveToStorage(favKey(), favoritesData);
-    saveToStorage(wlKey(), watchlistData);
+    const moviePromises = watchlist.map(async (wl) => {
+      try {
+        const res = await fetch(`/api/movies/${wl.movie_id}`);
+        if (!res.ok) return null;
+        const movie = await res.json();
+        return {
+          ...movie,
+          added_at: wl.timestamp,
+        };
+      } catch {
+        return null;
+      }
+    });
 
-    renderRatings();
-    updateHeaderStats();
-    toast(data?.message || "Rating removed.");
+    const movies = (await Promise.all(moviePromises)).filter((m) => m !== null);
+    movies.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+
+    const grid = document.createElement("div");
+    grid.className = "movie-grid";
+
+    movies.forEach((m) => {
+      const card = document.createElement("div");
+      card.className = "movie-tile";
+      card.style.cursor = "pointer";
+
+      const posterHtml = m.poster_url
+        ? `<img src="${m.poster_url}" alt="${m.title}" class="movie-poster-img" loading="lazy">`
+        : `<div class="movie-poster-tile">🎬</div>`;
+
+      // ✅ Use only first genre
+      const firstGenre = getFirstGenre(m.genres);
+      const metaText = `${m.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
+
+      card.innerHTML = `
+        ${posterHtml}
+        <div class="movie-tile-title">${m.title || "Untitled"}</div>
+        <div class="movie-tile-meta">${metaText}</div>
+        <div class="movie-tile-actions">
+          <button class="btn-icon btn-watchlist active" data-movie-id="${
+            m.movie_id
+          }" title="Remove from watchlist">
+            🔖
+          </button>
+        </div>
+      `;
+
+      card.addEventListener("click", (e) => {
+        if (!e.target.closest(".btn-icon")) {
+          showRatingModal(m.movie_id, m.title);
+        }
+      });
+
+      const watchlistBtn = card.querySelector(".btn-watchlist");
+      watchlistBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm(`Remove "${m.title}" from watchlist?`)) {
+          watchlist.splice(
+            watchlist.findIndex(
+              (w) => String(w.movie_id) === String(m.movie_id)
+            ),
+            1
+          );
+          localStorage.setItem(key, JSON.stringify(watchlist));
+          loadWatchlist();
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    container.innerHTML = "";
+    container.appendChild(grid);
   } catch (err) {
-    console.error(err);
-    toast("Error contacting backend.", true);
-  }
-}
-
-// ---- Favorites & Watchlist (per-user local) --------------------------------
-function toggleFavorite(movieId, btn) {
-  const idx = favoritesData.findIndex(
-    (m) => String(m.movie_id) === String(movieId)
-  );
-
-  if (idx >= 0) {
-    favoritesData.splice(idx, 1);
-    btn.classList.remove("active");
-  } else {
-    const movie = ratingsData.find(
-      (m) => String(m.movie_id) === String(movieId)
-    );
-    if (movie) {
-      favoritesData.push({ ...movie });
-      btn.classList.add("active");
-    }
-  }
-
-  saveToStorage(favKey(), favoritesData);
-  updateHeaderStats();
-
-  if (document.getElementById("tab-favorites").classList.contains("active")) {
-    renderFavorites();
-  }
-}
-
-function toggleWatchlist(movieId, btn) {
-  const idx = watchlistData.findIndex(
-    (m) => String(m.movie_id) === String(movieId)
-  );
-
-  if (idx >= 0) {
-    watchlistData.splice(idx, 1);
-    btn.classList.remove("active");
-  } else {
-    const movie = ratingsData.find(
-      (m) => String(m.movie_id) === String(movieId)
-    );
-    if (movie) {
-      watchlistData.push({ ...movie });
-      btn.classList.add("active");
-    }
-  }
-
-  saveToStorage(wlKey(), watchlistData);
-  updateHeaderStats();
-
-  if (document.getElementById("tab-watchlist").classList.contains("active")) {
-    renderWatchlist();
-  }
-}
-
-function loadFavorites() {
-  favoritesData = loadFromStorage(favKey(), []);
-  favoritesData = syncListWithRatings(favoritesData);
-  saveToStorage(favKey(), favoritesData);
-  updateHeaderStats();
-  renderFavorites();
-}
-
-function renderFavorites() {
-  const container = document.getElementById("favorites-list");
-
-  if (favoritesData.length === 0) {
+    console.error("Failed to load watchlist:", err);
     container.innerHTML =
-      '<p class="info-message">No favorites yet. Click the ♥ icon on any movie to add it!</p>';
+      '<p class="error-message">Failed to load watchlist.</p>';
+  }
+}
+
+async function loadFavorites() {
+  const container = document.getElementById("favorites-content");
+  container.innerHTML = '<p class="loading">Loading favorites...</p>';
+
+  const username = sessionStorage.getItem("username");
+  if (!username) {
+    container.innerHTML =
+      '<p class="info-message">Please log in to view favorites.</p>';
     return;
   }
-
-  const grid = renderMovieTiles(favoritesData);
-  container.innerHTML = "";
-  container.appendChild(grid);
-}
-
-function loadWatchlist() {
-  watchlistData = loadFromStorage(wlKey(), []);
-  watchlistData = syncListWithRatings(watchlistData);
-  saveToStorage(wlKey(), watchlistData);
-  updateHeaderStats();
-  renderWatchlist();
-}
-
-function renderWatchlist() {
-  const container = document.getElementById("watchlist-list");
-
-  if (watchlistData.length === 0) {
-    container.innerHTML =
-      '<p class="info-message">No movies in watchlist. Click the 🔖 icon to add movies!</p>';
-    return;
-  }
-
-  const grid = renderMovieTiles(watchlistData);
-  container.innerHTML = "";
-  container.appendChild(grid);
-}
-
-// ---- Statistics -------------------------------------------------------------
-async function loadStatistics() {
-  const container = document.getElementById("statistics-content");
-  container.innerHTML = '<p class="loading">Loading statistics...</p>';
 
   try {
-    const response = await fetch("/api/stats", {
-      method: "GET",
+    const key = `favorites:${username}`;
+    const stored = localStorage.getItem(key);
+    const favorites = stored ? JSON.parse(stored) : [];
+
+    if (favorites.length === 0) {
+      container.innerHTML =
+        '<p class="info-message">No favorites yet. Add movies to your favorites!</p>';
+      return;
+    }
+
+    const moviePromises = favorites.map(async (fav) => {
+      try {
+        const res = await fetch(`/api/movies/${fav.movie_id}`);
+        if (!res.ok) return null;
+        const movie = await res.json();
+        return {
+          ...movie,
+          favorited_at: fav.timestamp,
+        };
+      } catch {
+        return null;
+      }
+    });
+
+    const movies = (await Promise.all(moviePromises)).filter((m) => m !== null);
+    movies.sort((a, b) => (b.favorited_at || 0) - (a.favorited_at || 0));
+
+    const grid = document.createElement("div");
+    grid.className = "movie-grid";
+
+    movies.forEach((m) => {
+      const card = document.createElement("div");
+      card.className = "movie-tile";
+      card.style.cursor = "pointer";
+
+      const posterHtml = m.poster_url
+        ? `<img src="${m.poster_url}" alt="${m.title}" class="movie-poster-img" loading="lazy">`
+        : `<div class="movie-poster-tile">🎬</div>`;
+
+      // ✅ Use only first genre
+      const firstGenre = getFirstGenre(m.genres);
+      const metaText = `${m.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
+
+      card.innerHTML = `
+        ${posterHtml}
+        <div class="movie-tile-title">${m.title || "Untitled"}</div>
+        <div class="movie-tile-meta">${metaText}</div>
+        <div class="movie-tile-actions">
+          <button class="btn-icon btn-favorite active" data-movie-id="${
+            m.movie_id
+          }" title="Remove from favorites">
+            ♥
+          </button>
+        </div>
+      `;
+
+      card.addEventListener("click", (e) => {
+        if (!e.target.closest(".btn-icon")) {
+          showRatingModal(m.movie_id, m.title);
+        }
+      });
+
+      const favoriteBtn = card.querySelector(".btn-favorite");
+      favoriteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm(`Remove "${m.title}" from favorites?`)) {
+          favorites.splice(
+            favorites.findIndex(
+              (f) => String(f.movie_id) === String(m.movie_id)
+            ),
+            1
+          );
+          localStorage.setItem(key, JSON.stringify(favorites));
+          loadFavorites();
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    container.innerHTML = "";
+    container.appendChild(grid);
+  } catch (err) {
+    console.error("Failed to load favorites:", err);
+    container.innerHTML =
+      '<p class="error-message">Failed to load favorites.</p>';
+  }
+}
+
+function renderMovieList(movies, container, type) {
+  const grid = document.createElement("div");
+  grid.className = "movie-grid";
+
+  movies.forEach((movie) => {
+    const card = document.createElement("div");
+    card.className = "movie-tile";
+    card.style.cursor = "pointer";
+
+    const posterHtml = movie.poster_url
+      ? `<img src="${movie.poster_url}" alt="${movie.title}" class="movie-poster-img" loading="lazy">`
+      : `<div class="movie-poster-tile">🎬</div>`;
+
+    // ✅ Use only first genre
+    const firstGenre = getFirstGenre(movie.genres);
+
+    let metaText = "";
+    let ratingText = "";
+
+    if (type === "rating") {
+      // For ratings tab, show rating prominently
+      const meta = `${movie.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
+      metaText = `<div class="movie-tile-meta">${meta}</div>`;
+      ratingText = `<div class="movie-tile-rating">★ ${
+        movie.rating || 0
+      }/5</div>`;
+    } else {
+      // For other tabs
+      const meta = `${movie.year || ""} ${firstGenre ? "• " + firstGenre : ""}`;
+      metaText = `<div class="movie-tile-meta">${meta}</div>`;
+    }
+
+    card.innerHTML = `
+      ${posterHtml}
+      <div class="movie-tile-title">${movie.title || "Untitled"}</div>
+      ${metaText}
+      ${ratingText}
+    `;
+
+    card.addEventListener("click", () => {
+      showRatingModal(movie.movie_id, movie.title);
+    });
+
+    grid.appendChild(card);
+  });
+
+  container.innerHTML = "";
+  container.appendChild(grid);
+}
+
+async function loadStatistics() {
+  statisticsContent.innerHTML = '<p class="loading">Loading statistics...</p>';
+
+  try {
+    const response = await fetch("/api/user/stats", {
       credentials: "same-origin",
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error("Failed to load statistics");
 
     const stats = await response.json();
 
-    let genreHtml = "";
-    if (stats.top_genres && stats.top_genres.length > 0) {
-      genreHtml = stats.top_genres
-        .map(
-          (g, i) => `
-        <div class="genre-item">
-          <span class="genre-rank">${i + 1}.</span>
-          <span class="genre-name">${g.genre || "Unknown"}</span>
-          <span class="genre-count">${g.count || 0} movies</span>
-        </div>`
-        )
-        .join("");
-    } else {
-      genreHtml = '<p class="info-message">No genre data available</p>';
-    }
-
-    container.innerHTML = `
-      <div class="stats-card">
-        <h3>Rating Summary</h3>
-        <div class="stat-item">
-          <span class="stat-label">Total Ratings</span>
-          <span class="stat-value">${stats.total_ratings || 0}</span>
+    const statsHTML = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>Total Ratings</h3>
+          <p class="stat-big">${stats.total_ratings || 0}</p>
         </div>
-        <div class="stat-item">
-          <span class="stat-label">Average Rating</span>
-          <span class="stat-value">${
-            stats.average_rating ? stats.average_rating.toFixed(2) : "0.00"
-          } ★</span>
+        <div class="stat-card">
+          <h3>Average Rating</h3>
+          <p class="stat-big">${(stats.average_rating || 0).toFixed(2)} / 5</p>
         </div>
-      </div>
-
-      <div class="stats-card">
-        <h3>Top Genres</h3>
-        ${genreHtml}
+        <div class="stat-card">
+          <h3>Top Genres</h3>
+          <ul class="genre-list">
+            ${
+              stats.top_genres && stats.top_genres.length > 0
+                ? stats.top_genres
+                    .map(
+                      (g) =>
+                        `<li>${g.genre} <span class="genre-count">(${g.count})</span></li>`
+                    )
+                    .join("")
+                : "<li>No genre data available</li>"
+            }
+          </ul>
+        </div>
       </div>
     `;
+
+    statisticsContent.innerHTML = statsHTML;
   } catch (err) {
     console.error("Failed to load statistics:", err);
-    container.innerHTML =
-      '<p class="error-message">Failed to load statistics. Please try again.</p>';
+    statisticsContent.innerHTML =
+      '<p class="error-message">Failed to load statistics.</p>';
   }
 }
 
-// ---- Initialize -------------------------------------------------------------
-async function init() {
-  USERNAME = await checkSession();
-  if (!USERNAME) {
-    window.location.href = "/auth/login";
-    return;
-  }
+// Tab switching
+document.querySelectorAll(".profile-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const targetTab = tab.dataset.tab;
 
-  // load per-user lists from storage before first render
-  favoritesData = loadFromStorage(favKey(), []);
-  watchlistData = loadFromStorage(wlKey(), []);
-  updateHeaderStats();
+    // Update active tab
+    document.querySelectorAll(".profile-tab").forEach((t) => {
+      t.classList.remove("active");
+    });
+    tab.classList.add("active");
 
-  // pick initial tab from ?tab= or #hash; default "ratings"
-  const url = new URL(window.location.href);
-  const requested =
-    url.searchParams.get("tab") ||
-    (window.location.hash ? window.location.hash.substring(1) : null) ||
-    "ratings";
+    // Update active content
+    document.querySelectorAll(".profile-tab-content").forEach((content) => {
+      content.classList.remove("active");
+    });
+    document.getElementById(`${targetTab}-content`).classList.add("active");
 
-  const valid = ["ratings", "favorites", "watchlist", "statistics"];
-  const initialTab = valid.includes(requested) ? requested : "ratings";
-
-  activateTab(initialTab);
-
-  // Listen for rating changes from ratingModal.js
-  window.addEventListener("ratingUpdated", (e) => {
-    const detail = e.detail || {};
-    const movieId = detail.movie_id;
-    const rating = detail.rating;
-
-    if (!movieId) return;
-
-    // update ratingsData if we already have it
-    const existing = ratingsData.find(
-      (m) => String(m.movie_id) === String(movieId)
-    );
-    if (existing) {
-      existing.rating = rating;
-      existing.timestamp = existing.timestamp || Math.floor(Date.now() / 1000);
-    }
-
-    // reload lists from storage to pick up new ratings + membership
-    favoritesData = loadFromStorage(favKey(), favoritesData);
-    watchlistData = loadFromStorage(wlKey(), watchlistData);
-    favoritesData = syncListWithRatings(favoritesData);
-    watchlistData = syncListWithRatings(watchlistData);
-
-    saveToStorage(favKey(), favoritesData);
-    saveToStorage(wlKey(), watchlistData);
-
-    updateHeaderStats();
-    renderRatings();
-
-    if (document.getElementById("tab-favorites").classList.contains("active")) {
-      renderFavorites();
-    }
-    if (document.getElementById("tab-watchlist").classList.contains("active")) {
-      renderWatchlist();
+    // Load content for the selected tab
+    switch (targetTab) {
+      case "ratings":
+        loadRatings();
+        break;
+      case "watchlist":
+        loadWatchlist();
+        break;
+      case "favorites":
+        loadFavorites();
+        break;
+      case "statistics":
+        loadStatistics();
+        break;
     }
   });
+});
+
+// Update counts
+function updateCounts() {
+  const username = sessionStorage.getItem("username");
+  if (!username) return;
+
+  // Ratings count (will be loaded from API)
+  fetch("/api/button-click", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ button: "view_ratings_button" }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      const count = (data.ratings || []).length;
+      statRatings.textContent = count;
+    })
+    .catch(() => {
+      statRatings.textContent = "0";
+    });
+
+  // Watchlist count
+  const watchlistKey = `watchlist:${username}`;
+  const watchlistData = localStorage.getItem(watchlistKey);
+  const watchlist = watchlistData ? JSON.parse(watchlistData) : [];
+  statWatchlist.textContent = watchlist.length;
+
+  // Favorites count
+  const favoritesKey = `favorites:${username}`;
+  const favoritesData = localStorage.getItem(favoritesKey);
+  const favorites = favoritesData ? JSON.parse(favoritesData) : [];
+  statFavorites.textContent = favorites.length;
+}
+
+// Initialize
+async function init() {
+  // Check if user is logged in
+  try {
+    const response = await fetch("/session", { credentials: "same-origin" });
+    if (response.ok) {
+      const data = await response.json();
+      const username = data?.username;
+
+      if (username) {
+        currentUsername = username;
+        sessionStorage.setItem("username", username);
+
+        // Update profile UI
+        profileUsername.textContent = username;
+        profileAvatar.textContent = username[0].toUpperCase();
+
+        // Update counts
+        updateCounts();
+
+        // Load initial tab (ratings)
+        loadRatings();
+      } else {
+        // Not logged in, redirect to login
+        window.location.href = "/auth/login";
+      }
+    } else {
+      window.location.href = "/auth/login";
+    }
+  } catch (err) {
+    console.error("Failed to check session:", err);
+    window.location.href = "/auth/login";
+  }
 }
 
 init();
