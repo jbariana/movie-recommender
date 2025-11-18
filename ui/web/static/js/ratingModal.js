@@ -212,6 +212,9 @@ submitBtn.addEventListener("click", async () => {
         button: "add_rating_submit",
         movie_id: currentMovieId,
         rating: rating,
+        // NEW: send flags to backend
+        is_favorite: favChecked,
+        in_watchlist: wlChecked,
       }),
     });
 

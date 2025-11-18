@@ -20,7 +20,16 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
         cur = conn.cursor()
         cur.execute(
             f"""
-            SELECT r.movie_id, m.title, m.year, r.rating, r.timestamp, m.poster_url
+            SELECT
+                r.movie_id,
+                m.title,
+                m.year,
+                r.rating,
+                r.timestamp,
+                m.poster_url,
+                -- NEW: favorites & watchlist flags
+                r.is_favorite,
+                r.in_watchlist
             FROM ratings r
             LEFT JOIN movies m ON r.movie_id = m.movie_id
             WHERE r.user_id = {PH}
@@ -31,9 +40,20 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
         rows = cur.fetchall()
 
     results: List[Dict] = []
-    for movie_id, title_db, year, rating, ts, poster_url in rows:
+    for (
+        movie_id,
+        title_db,
+        year,
+        rating,
+        ts,
+        poster_url,
+        is_favorite,
+        in_watchlist,
+    ) in rows:
         # Prefer in-memory title map; fallback to DB
-        title = id_to_title(movie_id) or (f"{title_db} ({year})" if title_db and year else title_db)
+        title = id_to_title(movie_id) or (
+            f"{title_db} ({year})" if title_db and year else title_db
+        )
         results.append(
             {
                 "movie_id": int(movie_id),
@@ -41,6 +61,8 @@ def get_ratings_for_user(user_id: int) -> List[Dict]:
                 "rating": float(rating),
                 "timestamp": int(ts),
                 "poster_url": poster_url,
+                "is_favorite": bool(is_favorite),
+                "in_watchlist": bool(in_watchlist),
             }
         )
     return results
@@ -89,26 +111,54 @@ def search_movies_by_keyword(keyword: str, limit: int = 20) -> List[Dict]:
 def upsert_rating(user_id: int, movie_id: int, rating: float) -> None:
     """
     Keep a single row per (user, movie). Insert with current timestamp.
+    Favorites/watchlist flags live on the same row but are updated by
+    dedicated helpers so we don't lose them when changing the rating.
     """
     import time
+
     ts = int(time.time())
 
     with get_db(readonly=False) as conn:
         cur = conn.cursor()
-        cur.execute(f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};", (user_id, movie_id))
+        # Preserve existing fav/watch flags if present
         cur.execute(
             f"""
-            INSERT INTO ratings (user_id, movie_id, rating, timestamp)
-            VALUES ({PH}, {PH}, {PH}, {PH})
+            SELECT is_favorite, in_watchlist
+            FROM ratings
+            WHERE user_id = {PH} AND movie_id = {PH}
+            ORDER BY timestamp DESC
+            LIMIT 1
             """,
-            (user_id, movie_id, rating, ts),
+            (user_id, movie_id),
+        )
+        row = cur.fetchone()
+        existing_fav = bool(row[0]) if row else False
+        existing_wl = bool(row[1]) if row else False
+
+        # Delete old rows for this (user, movie)
+        cur.execute(
+            f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};",
+            (user_id, movie_id),
+        )
+
+        # Insert fresh row with preserved flags
+        cur.execute(
+            f"""
+            INSERT INTO ratings (
+                user_id, movie_id, rating, timestamp, is_favorite, in_watchlist
+            )
+            VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH})
+            """,
+            (user_id, movie_id, rating, ts, existing_fav, existing_wl),
         )
 
 
 # -----------------------------
 # Popular unseen (Bayesian weighted)
 # -----------------------------
-def top_unseen_for_user(user_id: int, limit: int = 20, min_votes: int = 50, m_param: int = 50) -> List[Dict]:
+def top_unseen_for_user(
+    user_id: int, limit: int = 20, min_votes: int = 50, m_param: int = 50
+) -> List[Dict]:
     """
     Recommend highly rated movies a user hasn't rated yet using
     a Bayesian weighted rating:
@@ -135,8 +185,13 @@ def top_unseen_for_user(user_id: int, limit: int = 20, min_votes: int = 50, m_pa
                 m.year,
                 s.v::INTEGER AS votes,
                 ROUND(s.R::numeric, 3) AS avg_rating,
-                ROUND(((s.v::numeric / (s.v + {PH})) * s.R
-                    + ({PH}::numeric / (s.v + {PH})) * g.C)::numeric, 3) AS weighted_rating
+                ROUND(
+                    (
+                        (s.v::numeric / (s.v + {PH})) * s.R
+                        + ({PH}::numeric / (s.v + {PH})) * g.C
+                    )::numeric,
+                    3
+                ) AS weighted_rating
             FROM stats s
             CROSS JOIN global_mean g
             JOIN movies m ON m.movie_id = s.movie_id
@@ -174,7 +229,9 @@ def get_all_genres() -> List[str]:
     genres_set = set()
     with get_db(readonly=True) as conn:
         cur = conn.cursor()
-        cur.execute("SELECT genres FROM movies WHERE genres IS NOT NULL AND genres <> ''")
+        cur.execute(
+            "SELECT genres FROM movies WHERE genres IS NOT NULL AND genres <> ''"
+        )
         for (g,) in cur.fetchall():
             if not g:
                 continue
@@ -187,8 +244,8 @@ def get_all_genres() -> List[str]:
 
 def list_movies(
     genre: Optional[str],
-    sort: str = "title",       # title|year|rating
-    direction: str = "asc",    # asc|desc
+    sort: str = "title",  # title|year|rating
+    direction: str = "asc",  # asc|desc
     page: int = 1,
     page_size: int = 20,
 ) -> Dict:
@@ -259,19 +316,20 @@ def list_movies(
         "has_prev": page > 1,
     }
 
+
 # --- User rating stats ---
 def get_user_rating_stats(user_id: int) -> dict:
     """
     Return user rating statistics including top genres.
     Works with both SQLite and PostgreSQL.
     """
-    from database.connection import get_db, DATABASE_URL
-    
+    from database.connection import DATABASE_URL
+
     is_postgres = DATABASE_URL and DATABASE_URL.startswith("postgres")
-    
+
     with get_db(readonly=True) as conn:
         cur = conn.cursor()
-        
+
         # Basic stats (works for both databases)
         cur.execute(
             """
@@ -281,12 +339,12 @@ def get_user_rating_stats(user_id: int) -> dict:
             FROM ratings
             WHERE user_id = %s
             """,
-            (user_id,)
+            (user_id,),
         )
         row = cur.fetchone()
         total_ratings = row[0] if row else 0
         average_rating = float(row[1]) if row and row[1] else 0.0
-        
+
         # Top genres (different SQL for PostgreSQL vs SQLite)
         if is_postgres:
             # PostgreSQL version: use string_to_array and unnest
@@ -311,7 +369,7 @@ def get_user_rating_stats(user_id: int) -> dict:
                 ORDER BY count DESC
                 LIMIT 5
                 """,
-                (user_id,)
+                (user_id,),
             )
         else:
             # SQLite version: use json_each
@@ -339,17 +397,129 @@ def get_user_rating_stats(user_id: int) -> dict:
                 ORDER BY count DESC
                 LIMIT 5
                 """,
-                (user_id,)
+                (user_id,),
             )
-        
+
         genre_rows = cur.fetchall()
-        top_genres = [
-            {"genre": row[0], "count": row[1]}
-            for row in genre_rows
-        ]
-        
+        top_genres = [{"genre": row[0], "count": row[1]} for row in genre_rows]
+
         return {
             "total_ratings": total_ratings,
             "average_rating": average_rating,
-            "top_genres": top_genres
+            "top_genres": top_genres,
         }
+
+
+# ----------------------------------------------------------------------
+# NEW: Favorites & Watchlist helpers
+# ----------------------------------------------------------------------
+def set_favorite_flag(user_id: int, movie_id: int, is_favorite: bool) -> None:
+    """
+    Set or clear the is_favorite flag on an existing rating row.
+    Assumes the user has already rated this movie.
+    """
+    with get_db(readonly=False) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            UPDATE ratings
+            SET is_favorite = {PH}
+            WHERE user_id = {PH} AND movie_id = {PH}
+            """,
+            (is_favorite, user_id, movie_id),
+        )
+
+
+def set_watchlist_flag(user_id: int, movie_id: int, in_watchlist: bool) -> None:
+    """
+    Set or clear the in_watchlist flag on an existing rating row.
+    Assumes the user has already rated this movie.
+    """
+    with get_db(readonly=False) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            UPDATE ratings
+            SET in_watchlist = {PH}
+            WHERE user_id = {PH} AND movie_id = {PH}
+            """,
+            (in_watchlist, user_id, movie_id),
+        )
+
+
+def get_favorites_for_user(user_id: int) -> List[Dict]:
+    """
+    Return all movies this user has marked as favorite.
+    """
+    with get_db(readonly=True) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+                r.movie_id,
+                m.title,
+                m.year,
+                m.genres,
+                r.rating,
+                r.timestamp,
+                m.poster_url
+            FROM ratings r
+            JOIN movies m ON m.movie_id = r.movie_id
+            WHERE r.user_id = {PH} AND r.is_favorite = 1
+            ORDER BY r.timestamp DESC
+            """,
+            (user_id,),
+        )
+        rows = cur.fetchall()
+
+    return [
+        {
+            "movie_id": int(mid),
+            "title": title,
+            "year": int(year) if year is not None else None,
+            "genres": genres,
+            "rating": float(rating),
+            "timestamp": int(ts),
+            "poster_url": poster_url,
+        }
+        for (mid, title, year, genres, rating, ts, poster_url) in rows
+    ]
+
+
+def get_watchlist_for_user(user_id: int) -> List[Dict]:
+    """
+    Return all movies this user has in their watchlist.
+    """
+    with get_db(readonly=True) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+                r.movie_id,
+                m.title,
+                m.year,
+                m.genres,
+                r.rating,
+                r.timestamp,
+                m.poster_url
+            FROM ratings r
+            JOIN movies m ON m.movie_id = r.movie_id
+            WHERE r.user_id = {PH} AND r.in_watchlist = 1
+            ORDER BY r.timestamp DESC
+            """,
+            (user_id,),
+        )
+        rows = cur.fetchall()
+
+    return [
+        {
+            "movie_id": int(mid),
+            "title": title,
+            "year": int(year) if year is not None else None,
+            "genres": genres,
+            "rating": float(rating),
+            "timestamp": int(ts),
+            "poster_url": poster_url,
+        }
+        for (mid, title, year, genres, rating, ts, poster_url) in rows
+    ]

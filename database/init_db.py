@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS ratings (
     movie_id INTEGER NOT NULL,
     rating DOUBLE PRECISION NOT NULL,
     timestamp BIGINT NOT NULL,
+    -- new in Sprint 8
+    is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+    in_watchlist BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (user_id, movie_id, timestamp),
     FOREIGN KEY (movie_id) REFERENCES movies(movie_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -70,6 +73,9 @@ CREATE TABLE IF NOT EXISTS ratings (
     movie_id INTEGER NOT NULL,
     rating REAL NOT NULL,
     timestamp INTEGER NOT NULL,
+    -- new in Sprint 8
+    is_favorite INTEGER NOT NULL DEFAULT 0,
+    in_watchlist INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, movie_id, timestamp),
     FOREIGN KEY (movie_id) REFERENCES movies(movie_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -93,13 +99,17 @@ CREATE INDEX IF NOT EXISTS idx_ratings_movie ON ratings(movie_id);
 CREATE INDEX IF NOT EXISTS idx_tags_movie ON tags(movie_id);
 """
 
+
 def _ensure_password_hash_column():
     """Add users.password_hash if an older DB exists."""
     with get_db(readonly=False) as conn:
         cur = conn.cursor()
         # Postgres: simple IF NOT EXISTS
         if IS_PG:
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;")
+            cur.execute(
+                "ALTER TABLE users "
+                "ADD COLUMN IF NOT EXISTS password_hash TEXT;"
+            )
             return
 
         # SQLite: check pragma and add only if missing
@@ -108,14 +118,57 @@ def _ensure_password_hash_column():
         if "password_hash" not in cols:
             cur.execute("ALTER TABLE users ADD COLUMN password_hash TEXT;")
 
+
+def _ensure_fav_watchlist_columns():
+    """
+    Add ratings.is_favorite and ratings.in_watchlist
+    for existing databases that were created before Sprint 8.
+    """
+    with get_db(readonly=False) as conn:
+        cur = conn.cursor()
+
+        if IS_PG:
+            # BOOLEAN with default false
+            cur.execute(
+                "ALTER TABLE ratings "
+                "ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;"
+            )
+            cur.execute(
+                "ALTER TABLE ratings "
+                "ADD COLUMN IF NOT EXISTS in_watchlist BOOLEAN NOT NULL DEFAULT FALSE;"
+            )
+            return
+
+        # SQLite: inspect schema and add missing columns
+        cur.execute("PRAGMA table_info(ratings);")
+        cols = [r[1] for r in cur.fetchall()]
+
+        if "is_favorite" not in cols:
+            cur.execute(
+                "ALTER TABLE ratings "
+                "ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;"
+            )
+
+        if "in_watchlist" not in cols:
+            cur.execute(
+                "ALTER TABLE ratings "
+                "ADD COLUMN in_watchlist INTEGER NOT NULL DEFAULT 0;"
+            )
+
+
 def main() -> None:
     sql = SCHEMA_SQL_PG if IS_PG else SCHEMA_SQL_SQLITE
     with get_db(readonly=False) as conn:
         cur = conn.cursor()
         for stmt in [s.strip() for s in sql.split(";") if s.strip()]:
             cur.execute(stmt + ";")
+
+    # migrations for older DBs
     _ensure_password_hash_column()
+    _ensure_fav_watchlist_columns()
+
     print("✅ Database schema created/updated")
+
 
 if __name__ == "__main__":
     main()

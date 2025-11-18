@@ -48,6 +48,20 @@ def _resolve_title_from_entry(entry):
     return None
 
 
+def _to_bool(val):
+    """
+    Robustly convert payload values to bool.
+    Accepts bool, str ("true"/"false"/"1"/"0"), int, etc.
+    """
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    if isinstance(val, str):
+        return val.strip().lower() in ("1", "true", "t", "yes", "on")
+    return False
+
+
 def handle_button_click(button_id, payload=None):
     payload = payload or {}
 
@@ -60,14 +74,22 @@ def handle_button_click(button_id, payload=None):
 
         results = []
         for r in data.get("ratings", []):
-            title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
-            results.append({
-                "movie_id": r.get("movie_id") if r.get("movie_id") is not None else r.get("movie"),
-                "title": title,
-                "movie": title,  # legacy key some front-end bits expect
-                "rating": r.get("rating"),
-                "timestamp": r.get("timestamp"),
-            })
+            title = _resolve_title_from_entry(r) or (
+                f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled"
+            )
+            results.append(
+                {
+                    "movie_id": r.get("movie_id")
+                    if r.get("movie_id") is not None
+                    else r.get("movie"),
+                    "title": title,
+                    "movie": title,  # legacy key some front-end bits expect
+                    "rating": r.get("rating"),
+                    "timestamp": r.get("timestamp"),
+                    "is_favorite": r.get("is_favorite", False),
+                    "in_watchlist": r.get("in_watchlist", False),
+                }
+            )
         return {
             "ratings": results,
             "source": "profile",
@@ -105,21 +127,32 @@ def handle_button_click(button_id, payload=None):
                 # Best-effort sync (if profile JSON exists)
                 try:
                     from api.sync_user_json import sync_user_ratings
+
                     if PROFILE_PATH.exists():
                         sync_user_ratings(PROFILE_PATH)
                         # re-read DB after sync
                         stats2 = get_user_rating_stats(user_id) or {}
                         if int(stats2.get("total", 0) or 0) > 0:
                             total_db = int(stats2.get("total", 0))
-                            avg_db = float(stats2["avg"]) if stats2.get("avg") is not None else 0.0
+                            avg_db = (
+                                float(stats2["avg"])
+                                if stats2.get("avg") is not None
+                                else 0.0
+                            )
                             by_genre_db = stats2.get("by_genre", [])
                 except Exception as ex:
-                    logger.warning("stats: sync_user_ratings best-effort failed: %s", ex)
+                    logger.warning(
+                        "stats: sync_user_ratings best-effort failed: %s", ex
+                    )
 
                 # If still zero, compute from local profile JSON as a fallback
                 if total_db == 0 and PROFILE_PATH.exists():
                     prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-                    raw = [float(r["rating"]) for r in prof.get("ratings", []) if r.get("rating") is not None]
+                    raw = [
+                        float(r["rating"])
+                        for r in prof.get("ratings", [])
+                        if r.get("rating") is not None
+                    ]
                     total_json = len(raw)
                     avg_json = round(sum(raw) / total_json, 2) if total_json else 0.0
             except Exception:
@@ -131,7 +164,10 @@ def handle_button_click(button_id, payload=None):
                     "average_rating": avg_json,
                     "top_genres": [],  # genre breakdown needs DB join; omit in fallback
                 }
-                return {"statistics": statistics, "source": "stats_profile_fallback"}
+                return {
+                    "statistics": statistics,
+                    "source": "stats_profile_fallback",
+                }
 
         # 3) Normal DB response
         statistics = {
@@ -147,6 +183,7 @@ def handle_button_click(button_id, payload=None):
     # --- Get Recommendations ---
     if button_id == "get_rec_button":
         from recommender.baseline import recommend_titles_for_user
+
         try:
             profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
             uid = int(profile.get("user_id", 99))
@@ -159,19 +196,25 @@ def handle_button_click(button_id, payload=None):
         for item in recs:
             if isinstance(item, (list, tuple)) and len(item) >= 2:
                 first, score = item[0], item[1]
-                title = id_to_title(first) if isinstance(first, int) else normalize_title(str(first))
+                title = (
+                    id_to_title(first)
+                    if isinstance(first, int)
+                    else normalize_title(str(first))
+                )
                 try:
                     rating_val = float(score)
                 except Exception:
                     rating_val = None
                 results.append({"title": title, "movie": title, "rating": rating_val})
             else:
-                title = _resolve_title_from_entry(item if isinstance(item, dict) else {"movie": item})
+                title = _resolve_title_from_entry(
+                    item if isinstance(item, dict) else {"movie": item}
+                )
                 results.append({"title": title, "movie": title, "rating": None})
 
         return {"ratings": results, "source": "recs"}
 
-    # --- Add Rating (writes to profile JSON and best-effort sync to DB) ---
+    # --- Add Rating (JSON + DB write with favorite/watchlist flags) ---
     if button_id == "add_rating_submit":
         movie_id = payload.get("movie_id") or payload.get("movie")
         rating = payload.get("rating")
@@ -179,6 +222,10 @@ def handle_button_click(button_id, payload=None):
             return {"ok": False, "error": "No movie_id provided."}
         if rating is None:
             return {"ok": False, "error": "No rating provided."}
+
+        # parse favorite/watchlist flags from payload
+        is_favorite = _to_bool(payload.get("is_favorite", False))
+        in_watchlist = _to_bool(payload.get("in_watchlist", False))
 
         try:
             # read or create profile JSON
@@ -193,62 +240,121 @@ def handle_button_click(button_id, payload=None):
             except Exception:
                 mid_val = None
 
-            # remove any existing rating for same movie
+            # remove any existing rating for same movie in JSON profile
             prof["ratings"] = [
-                r for r in prof.get("ratings", [])
-                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
+                r
+                for r in prof.get("ratings", [])
+                if str(
+                    r.get("movie_id")
+                    if r.get("movie_id") is not None
+                    else r.get("movie")
+                )
+                != str(movie_id)
             ]
 
+            ts = int(time.time())
             new_entry = {
                 "movie_id": mid_val if mid_val is not None else movie_id,
                 "rating": float(rating),
-                "timestamp": int(time.time())
+                "timestamp": ts,
+                "is_favorite": is_favorite,
+                "in_watchlist": in_watchlist,
             }
             prof.setdefault("ratings", []).append(new_entry)
             PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
+            PROFILE_PATH.write_text(
+                json.dumps(prof, indent=2), encoding="utf-8"
+            )
 
-            # attempt sync to DB (best-effort)
+            # --- write directly to DB with flags ---
             try:
-                from api.sync_user_json import sync_user_ratings
-                sync_user_ratings(PROFILE_PATH)
+                from flask import session
+                from database.users import get_user_by_username
+
+                uname = session.get("username")
+                user_id_db = None
+                if uname:
+                    ur = get_user_by_username(uname)  # (id, username, hash) or dict
+                    if ur is not None:
+                        # tuple-like
+                        try:
+                            user_id_db = int(ur[0])
+                        except Exception:
+                            # dict-like fallback
+                            if isinstance(ur, dict):
+                                for k in ("user_id", "id", "USER_ID", "ID"):
+                                    if k in ur:
+                                        user_id_db = int(ur[k])
+                                        break
+
+                if user_id_db and mid_val is not None:
+                    save_rating(
+                        user_id_db,
+                        mid_val,
+                        rating,
+                        is_favorite=is_favorite,
+                        in_watchlist=in_watchlist,
+                    )
+                else:
+                    logger.warning(
+                        "add_rating_submit: could not resolve user_id or movie_id for DB write (user_id=%s, mid_val=%s)",
+                        user_id_db,
+                        mid_val,
+                    )
             except Exception as ex:
-                logger.warning("sync_user_ratings failed on add: %s", ex)
-            
-            # invalidate cached recommendations so new rating takes effect
+                logger.warning("save_rating with flags failed: %s", ex)
+
+            # cache bust (optional but kept from your previous logic)
             try:
                 from flask import session
                 from database.users import get_user_by_username
                 from cache import cache, key_content_recs
-                
+
                 uname = session.get("username")
                 user_id_for_cache = None
                 if uname:
-                    ur = get_user_by_username(uname)  # (id, username, hash)
+                    ur = get_user_by_username(uname)
                     if ur:
-                        user_id_for_cache = int(ur[0])
-                if not user_id_for_cache:
-                    # fallback to profile file if available
-                    user_id_for_cache = int((prof or {}).get("user_id") or 0)
-                
+                        try:
+                            user_id_for_cache = int(ur[0])
+                        except Exception:
+                            if isinstance(ur, dict):
+                                for k in ("user_id", "id", "USER_ID", "ID"):
+                                    if k in ur:
+                                        user_id_for_cache = int(ur[k])
+                                        break
+
                 if user_id_for_cache:
                     for size in (10, 20, 50, 100):
-                        cache.delete(key_content_recs(user_id=user_id_for_cache, k=size))
+                        cache.delete(
+                            key_content_recs(user_id=user_id_for_cache, k=size)
+                        )
             except Exception as _ex:
                 logger.warning("cache bust on rating failed: %s", _ex)
 
-            # return updated ratings with titles
+            # return updated ratings with titles and flags from JSON profile
             results = []
             for r in prof.get("ratings", []):
-                title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
-                results.append({
-                    "title": title,
-                    "rating": r.get("rating"),
-                    "movie_id": r.get("movie_id"),
-                    "timestamp": r.get("timestamp")
-                })
+                title = _resolve_title_from_entry(r) or (
+                    f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled"
+                )
+                results.append(
+                    {
+                        "title": title,
+                        "rating": r.get("rating"),
+                        "movie_id": r.get("movie_id"),
+                        "timestamp": r.get("timestamp"),
+                        "is_favorite": r.get("is_favorite", False),
+                        "in_watchlist": r.get("in_watchlist", False),
+                    }
+                )
 
-            return {"ok": True, "message": "Rating saved.", "ratings": results, "source": "profile"}
+            return {
+                "ok": True,
+                "message": "Rating saved.",
+                "ratings": results,
+                "source": "profile",
+            }
 
         except Exception as ex:
             logger.exception("Failed to add rating")
@@ -268,23 +374,34 @@ def handle_button_click(button_id, payload=None):
 
             before = len(prof.get("ratings", []))
             prof["ratings"] = [
-                r for r in prof.get("ratings", [])
-                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
+                r
+                for r in prof.get("ratings", [])
+                if str(
+                    r.get("movie_id")
+                    if r.get("movie_id") is not None
+                    else r.get("movie")
+                )
+                != str(movie_id)
             ]
             after = len(prof.get("ratings", []))
-            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
+            PROFILE_PATH.write_text(
+                json.dumps(prof, indent=2), encoding="utf-8"
+            )
 
             try:
                 from api.sync_user_json import sync_user_ratings
+
                 sync_user_ratings(PROFILE_PATH)
             except Exception as ex:
                 logger.warning("sync_user_ratings failed on remove: %s", ex)
 
             return {
                 "ok": True,
-                "message": "Removed." if before != after else "No rating found.",
+                "message": "Removed."
+                if before != after
+                else "No rating found.",
                 "ratings": prof.get("ratings", []),
-                "source": "profile"
+                "source": "profile",
             }
         except Exception as ex:
             logger.exception("Failed to remove rating")
@@ -298,18 +415,33 @@ def handle_button_click(button_id, payload=None):
             return {"ratings": [], "source": "search", "query": query}
         try:
             from database.db_query import search_movies_by_keyword
+
             rows = search_movies_by_keyword(query, limit=30)
             results = []
             for r in rows:
-                title = r.get("title") or (id_to_title(r.get("movie_id")) if r.get("movie_id") else None)
-                display = title if title else (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
-                results.append({
-                    "movie_id": r.get("movie_id"),
-                    "title": display,
-                    "movie": display,
-                    "year": r.get("year"),
-                    "genres": r.get("genres"),
-                })
+                title = r.get("title") or (
+                    id_to_title(r.get("movie_id"))
+                    if r.get("movie_id")
+                    else None
+                )
+                display = (
+                    title
+                    if title
+                    else (
+                        f"ID {r.get('movie_id')}"
+                        if r.get("movie_id")
+                        else "Untitled"
+                    )
+                )
+                results.append(
+                    {
+                        "movie_id": r.get("movie_id"),
+                        "title": display,
+                        "movie": display,
+                        "year": r.get("year"),
+                        "genres": r.get("genres"),
+                    }
+                )
             return {"ratings": results, "source": "search", "query": query}
         except Exception as ex:
             logger.exception("Search failed")
@@ -319,18 +451,35 @@ def handle_button_click(button_id, payload=None):
     return {"error": f"Unhandled button id: {button_id}"}
 
 
-def save_rating(user_id, movie_id, rating):
+def save_rating(user_id, movie_id, rating, is_favorite=False, in_watchlist=False):
     """
     Save a user's rating for a movie into the database.
     Upsert style (delete then insert) to keep a single row per (user, movie).
+    Also persists favorite/watchlist flags.
     """
     from database.paramstyle import PH
+
     with get_db(readonly=False) as conn:
         cur = conn.cursor()
-        cur.execute(f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};", (user_id, movie_id))
+        # delete existing row
         cur.execute(
-            f"INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES ({PH}, {PH}, {PH}, {PH});",
-            (user_id, movie_id, float(rating), int(time.time()))
+            f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};",
+            (user_id, movie_id),
+        )
+        # insert new row with flags
+        cur.execute(
+            f"""
+            INSERT INTO ratings (user_id, movie_id, rating, timestamp, is_favorite, in_watchlist)
+            VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH});
+            """,
+            (
+                user_id,
+                movie_id,
+                float(rating),
+                int(time.time()),
+                bool(is_favorite),
+                bool(in_watchlist),
+            ),
         )
 
 
@@ -354,18 +503,20 @@ def get_user_profile(user_id):
             cur.execute(
                 "SELECT r.movie_id, r.rating, m.title "
                 "FROM ratings r LEFT JOIN movies m ON m.movie_id = r.movie_id "
-                "WHERE r.user_id = %s;" if conn.__class__.__module__.startswith("psycopg2")
+                "WHERE r.user_id = %s;"
+                if conn.__class__.__module__.startswith("psycopg2")
                 else "SELECT r.movie_id, r.rating, m.title "
-                     "FROM ratings r LEFT JOIN movies m ON m.movie_id = r.movie_id "
-                     "WHERE r.user_id = ?;",
-                (user_id,)
+                "FROM ratings r LEFT JOIN movies m ON m.movie_id = r.movie_id "
+                "WHERE r.user_id = ?;",
+                (user_id,),
             )
         except Exception:
             # minimal fallback
             cur.execute(
-                "SELECT movie_id, rating FROM ratings WHERE user_id = %s;" if conn.__class__.__module__.startswith("psycopg2")
+                "SELECT movie_id, rating FROM ratings WHERE user_id = %s;"
+                if conn.__class__.__module__.startswith("psycopg2")
                 else "SELECT movie_id, rating FROM ratings WHERE user_id = ?;",
-                (user_id,)
+                (user_id,),
             )
         rows = cur.fetchall()
 
@@ -391,6 +542,6 @@ def get_user_profile(user_id):
         "username": f"user_{user_id}",
         "average_rating": avg_rating,
         "ratings": ratings,
-        "favorites": favorites
+        "favorites": favorites,
     }
     return profile

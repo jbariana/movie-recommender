@@ -297,6 +297,52 @@ async function deleteRating(movieId) {
   }
 }
 
+// ---- NEW: sync favorite/watchlist flags to backend --------------------------
+async function syncFavoriteWatchlistToBackend(movieId) {
+  // find rating for this movie
+  const movie = ratingsData.find((m) => String(m.movie_id) === String(movieId));
+
+  // if there is no rating, we can't meaningfully update DB flags
+  if (!movie) {
+    console.warn("No rating found for movie_id", movieId, "– skipping DB sync");
+    return;
+  }
+
+  const isFav = movieInList(favoritesData, movieId);
+  const inWl = movieInList(watchlistData, movieId);
+
+  const payload = {
+    button: "add_rating_submit",
+    movie_id: movieId,
+    rating: movie.rating || 3, // fallback if somehow missing
+    is_favorite: isFav,
+    in_watchlist: inWl,
+  };
+
+  try {
+    const res = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data?.error || data?.ok === false) {
+      console.error("Failed to sync flags to backend:", data || res.status);
+      toast(
+        data?.error ||
+          "Failed to sync favorites/watchlist to server. Local state only.",
+        true
+      );
+    }
+  } catch (err) {
+    console.error("Network error syncing flags:", err);
+    toast("Error contacting backend while saving favorites/watchlist.", true);
+  }
+}
+
 // ---- Favorites & Watchlist (per-user local) --------------------------------
 function toggleFavorite(movieId, btn) {
   const idx = favoritesData.findIndex(
@@ -322,6 +368,9 @@ function toggleFavorite(movieId, btn) {
   if (document.getElementById("tab-favorites").classList.contains("active")) {
     renderFavorites();
   }
+
+  // NEW: also sync to backend
+  syncFavoriteWatchlistToBackend(movieId);
 }
 
 function toggleWatchlist(movieId, btn) {
@@ -348,6 +397,9 @@ function toggleWatchlist(movieId, btn) {
   if (document.getElementById("tab-watchlist").classList.contains("active")) {
     renderWatchlist();
   }
+
+  // NEW: also sync to backend
+  syncFavoriteWatchlistToBackend(movieId);
 }
 
 function loadFavorites() {
