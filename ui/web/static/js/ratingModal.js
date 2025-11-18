@@ -1,19 +1,35 @@
 /**
  * ratingModal.js
- * star rating modal for adding/updating movie ratings
- * creates and manages the popup modal with 5-star rating interface
+ * Star rating modal + favorite + watchlist checkboxes.
+ *
+ * Works from BOTH Browse and Profile:
+ *  - Saves rating through /api/button-click (add_rating_submit)
+ *  - Updates favorites/watchlist in localStorage per user
+ *  - Dispatches a "ratingUpdated" event so profile.js can refresh
  */
 
-//get reference to output div for status messages
+// main output area used on Browse page (safe if it doesn't exist)
 const outputDiv = document.getElementById("output");
 
-//create modal element with star rating interface
+// ---------- Create modal DOM once ----------
 const ratingModal = document.createElement("div");
 ratingModal.id = "rating-modal";
 ratingModal.className = "rating-modal hidden";
 ratingModal.innerHTML = `
   <div class="rating-modal-content">
     <h3 id="rating-modal-title">Rate Movie</h3>
+
+    <div class="rating-modal-flags">
+      <label>
+        <input type="checkbox" id="rating-favorite" />
+        ♥ Favorited
+      </label>
+      <label style="margin-left: 0.75rem;">
+        <input type="checkbox" id="rating-watchlist" />
+        In Watchlist
+      </label>
+    </div>
+
     <div class="star-rating">
       <span class="star" data-value="1">★</span>
       <span class="star" data-value="2">★</span>
@@ -21,6 +37,7 @@ ratingModal.innerHTML = `
       <span class="star" data-value="4">★</span>
       <span class="star" data-value="5">★</span>
     </div>
+
     <div class="rating-modal-buttons">
       <button id="rating-modal-submit">Submit</button>
       <button id="rating-modal-cancel">Cancel</button>
@@ -29,142 +46,242 @@ ratingModal.innerHTML = `
 `;
 document.body.appendChild(ratingModal);
 
-//track current movie being rated
+// cache elements
+const favoriteCheckbox = document.getElementById("rating-favorite");
+const watchlistCheckbox = document.getElementById("rating-watchlist");
+const submitBtn = document.getElementById("rating-modal-submit");
+const cancelBtn = document.getElementById("rating-modal-cancel");
+
+// ---------- State ----------
 let currentMovieId = null;
 let currentMovieTitle = null;
 
-//show rating modal for a specific movie
-export function showRatingModal(movieId, movieTitle) {
-  currentMovieId = movieId;
-  currentMovieTitle = movieTitle;
+// ---------- Helpers: per-user storage ----------
+function getCurrentUsername() {
+  const el = document.querySelector(".login-status b");
+  return el ? el.textContent.trim() : null;
+}
 
-  //update modal title with movie name
-  document.getElementById(
-    "rating-modal-title"
-  ).textContent = `Rate: ${movieTitle}`;
+function favKey() {
+  const u = getCurrentUsername();
+  return u ? `favorites:${u}` : "favorites";
+}
+function wlKey() {
+  const u = getCurrentUsername();
+  return u ? `watchlist:${u}` : "watchlist";
+}
 
-  //show modal
-  ratingModal.classList.remove("hidden");
+function loadList(key, fallback = []) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-  //reset star selection state
-  document
+function saveList(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore quota errors etc.
+  }
+}
+
+function movieInList(list, movieId) {
+  return list.some((m) => String(m.movie_id) === String(movieId));
+}
+
+function upsertMovie(list, movieId, title, rating) {
+  const idx = list.findIndex((m) => String(m.movie_id) === String(movieId));
+  const base = { movie_id: movieId, title: title || "Untitled" };
+  if (rating != null) base.rating = rating;
+
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...base };
+  } else {
+    list.push(base);
+  }
+}
+
+function removeMovie(list, movieId) {
+  return list.filter((m) => String(m.movie_id) !== String(movieId));
+}
+
+// ---------- Star UI helpers ----------
+function clearStarState() {
+  ratingModal
     .querySelectorAll(".star")
     .forEach((s) => s.classList.remove("selected", "hover"));
 }
 
-//hide rating modal and clear state
+function applyHover(value) {
+  ratingModal.querySelectorAll(".star").forEach((s) => {
+    const v = parseInt(s.dataset.value, 10);
+    s.classList.toggle("hover", v <= value);
+  });
+}
+
+function selectStars(value) {
+  ratingModal.querySelectorAll(".star").forEach((s) => {
+    const v = parseInt(s.dataset.value, 10);
+    s.classList.toggle("selected", v <= value);
+  });
+}
+
+function getSelectedRating() {
+  const selected = ratingModal.querySelectorAll(".star.selected");
+  return selected.length;
+}
+
+// ---------- Public API ----------
+export function showRatingModal(movieId, movieTitle) {
+  currentMovieId = movieId;
+  currentMovieTitle = movieTitle;
+
+  // title
+  document.getElementById(
+    "rating-modal-title"
+  ).textContent = `Rate: ${movieTitle}`;
+
+  // reset stars
+  clearStarState();
+
+  // pre-check favorite / watchlist based on storage
+  const favs = loadList(favKey(), []);
+  const wls = loadList(wlKey(), []);
+  favoriteCheckbox.checked = movieInList(favs, movieId);
+  watchlistCheckbox.checked = movieInList(wls, movieId);
+
+  // show modal
+  ratingModal.classList.remove("hidden");
+}
+
+// ---------- Hide modal ----------
 function hideRatingModal() {
   ratingModal.classList.add("hidden");
   currentMovieId = null;
   currentMovieTitle = null;
 }
 
-//star hover effect to preview rating
+// ---------- Star interactions ----------
 ratingModal.addEventListener("mouseover", (e) => {
   if (e.target.classList.contains("star")) {
-    const value = parseInt(e.target.dataset.value);
-    //highlight all stars up to hovered star
-    document.querySelectorAll(".star").forEach((s, idx) => {
-      s.classList.toggle("hover", idx < value);
-    });
+    const value = parseInt(e.target.dataset.value, 10);
+    applyHover(value);
   }
 });
 
-//remove hover effect when mouse leaves star
 ratingModal.addEventListener("mouseout", (e) => {
   if (e.target.classList.contains("star")) {
-    document
+    ratingModal
       .querySelectorAll(".star")
       .forEach((s) => s.classList.remove("hover"));
   }
 });
 
-//star click to select rating
 ratingModal.addEventListener("click", (e) => {
   if (e.target.classList.contains("star")) {
-    const value = parseInt(e.target.dataset.value);
-    //mark all stars up to clicked star as selected
-    document.querySelectorAll(".star").forEach((s, idx) => {
-      s.classList.toggle("selected", idx < value);
-    });
+    const value = parseInt(e.target.dataset.value, 10);
+    selectStars(value);
   }
 });
 
-//submit rating to backend
-document
-  .getElementById("rating-modal-submit")
-  .addEventListener("click", async () => {
-    //validate that user selected at least one star
-    const selectedStars = document.querySelectorAll(".star.selected");
-    if (selectedStars.length === 0) {
-      alert("Please select a rating");
+// ---------- Submit ----------
+submitBtn.addEventListener("click", async () => {
+  if (!currentMovieId) {
+    hideRatingModal();
+    return;
+  }
+
+  const rating = getSelectedRating();
+  if (rating === 0) {
+    alert("Please select a rating");
+    return;
+  }
+
+  const favChecked = favoriteCheckbox.checked;
+  const wlChecked = watchlistCheckbox.checked;
+
+  try {
+    const res = await fetch("/api/button-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        button: "add_rating_submit",
+        movie_id: currentMovieId,
+        rating: rating,
+      }),
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { text };
+    }
+
+    if (!res.ok || data?.error || data?.ok === false) {
+      if (outputDiv) {
+        outputDiv.textContent =
+          data?.error || data?.message || `Server error (${res.status})`;
+      }
+      hideRatingModal();
       return;
     }
 
-    //count selected stars (1-5)
-    const rating = selectedStars.length;
+    // --- update favorites / watchlist in localStorage ---
+    let favs = loadList(favKey(), []);
+    let wls = loadList(wlKey(), []);
 
-    try {
-      //send rating to backend API
-      const res = await fetch("/api/button-click", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          button: "add_rating_submit",
-          movie_id: currentMovieId,
-          rating: rating,
-        }),
-        credentials: "same-origin",
-      });
-
-      //parse response (handle both JSON and plain text)
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { text };
-      }
-
-      //handle HTTP errors
-      if (!res.ok) {
-        outputDiv.textContent =
-          data?.error || data?.message || `Server error (${res.status})`;
-        hideRatingModal();
-        return;
-      }
-
-      //handle successful rating submission
-      if (data?.ok) {
-        outputDiv.textContent = data.message || "Rating added successfully.";
-        hideRatingModal();
-
-        //refresh the current view to show updated rating
-        const lastButton = sessionStorage.getItem("lastButton");
-        if (lastButton) {
-          const { handleActionButton } = await import("./actionHandler.js");
-          handleActionButton(lastButton);
-        }
-      } else {
-        //handle API errors
-        outputDiv.textContent =
-          data?.error || data?.message || "Failed to add rating.";
-        hideRatingModal();
-      }
-    } catch (err) {
-      //handle network errors
-      outputDiv.textContent = "Error contacting backend.";
-      console.error("Network error adding rating:", err);
-      hideRatingModal();
+    if (favChecked) {
+      upsertMovie(favs, currentMovieId, currentMovieTitle, rating);
+    } else {
+      favs = removeMovie(favs, currentMovieId);
     }
-  });
 
-//cancel button closes modal without saving
-document.getElementById("rating-modal-cancel").addEventListener("click", () => {
+    if (wlChecked) {
+      upsertMovie(wls, currentMovieId, currentMovieTitle, rating);
+    } else {
+      wls = removeMovie(wls, currentMovieId);
+    }
+
+    saveList(favKey(), favs);
+    saveList(wlKey(), wls);
+
+    // notify profile.js so it can refresh without reload
+    window.dispatchEvent(
+      new CustomEvent("ratingUpdated", {
+        detail: {
+          movie_id: currentMovieId,
+          rating,
+          isFavorite: favChecked,
+          inWatchlist: wlChecked,
+        },
+      })
+    );
+
+    if (outputDiv) {
+      outputDiv.textContent = data.message || "Rating saved.";
+    }
+
+    hideRatingModal();
+  } catch (err) {
+    console.error("Network error adding rating:", err);
+    if (outputDiv) {
+      outputDiv.textContent = "Error contacting backend.";
+    }
+    hideRatingModal();
+  }
+});
+
+// ---------- Cancel + click outside ----------
+cancelBtn.addEventListener("click", () => {
   hideRatingModal();
 });
 
-//close modal when clicking outside of it
 ratingModal.addEventListener("click", (e) => {
   if (e.target === ratingModal) {
     hideRatingModal();
