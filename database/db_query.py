@@ -164,6 +164,20 @@ def upsert_rating(user_id: int, movie_id: int, rating: float) -> None:
         )
 
 
+def delete_rating(user_id: int, movie_id: int) -> int:
+    """
+    Delete a user's rating for a movie. Returns number of rows deleted.
+    """
+    with get_db(readonly=False) as conn:
+        cur = conn.cursor()
+        cur.execute(f"DELETE FROM ratings WHERE user_id = {PH} AND movie_id = {PH};", (user_id, movie_id))
+        try:
+            conn.commit()
+        except Exception:
+            # some connection wrappers auto-commit; ignore commit errors
+            pass
+        return cur.rowcount
+
 # -----------------------------
 # Popular unseen (Bayesian weighted)
 # -----------------------------

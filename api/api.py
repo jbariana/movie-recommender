@@ -10,7 +10,17 @@ from database.connection import get_db
 
 logger = logging.getLogger(__name__)
 
-PROFILE_PATH = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
+# Legacy single-file fallback kept for backwards-compatibility,
+# but prefer per-user files returned by profile_path_for_username().
+LEGACY_PROFILE_PATH = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
+
+def profile_path_for_username(username: str | None) -> Path:
+    PROFILE_DIR = Path(__file__).resolve().parent.parent / "user_profile"
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    if username:
+        safe = "".join(c for c in username if c.isalnum() or c in ("_", "-")).lower()
+        return PROFILE_DIR / f"{safe}.json"
+    return LEGACY_PROFILE_PATH
 
 
 def _resolve_title_from_entry(entry):
@@ -51,127 +61,130 @@ def _resolve_title_from_entry(entry):
 def handle_button_click(button_id, payload=None):
     payload = payload or {}
 
-    # --- View Ratings (legacy: from profile JSON) ---
+    from flask import session
+    from database.users import get_user_by_username
+    from database.db_query import get_ratings_for_user, upsert_rating, delete_rating
+
+    uname = session.get("username")
     if button_id == "view_ratings_button":
+        if not uname:
+            return {"error": "not_logged_in"}, 401
+        user_row = get_user_by_username(uname)
+        if not user_row:
+            return {"error": "user_not_found"}, 404
+        # user_row may be tuple-like; assume id at index 0
+        user_id = int(user_row[0])
         try:
-            data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            data = {"username": None, "user_id": None, "ratings": []}
+            ratings = get_ratings_for_user(user_id)
+            return {"ratings": ratings, "source": "db", "username": uname}
+        except Exception as ex:
+            logger.exception("view_ratings failed")
+            return {"error": "internal"}, 500
 
-        results = []
-        for r in data.get("ratings", []):
-            title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
-            results.append({
-                "movie_id": r.get("movie_id") if r.get("movie_id") is not None else r.get("movie"),
-                "title": title,
-                "movie": title,  # legacy key some front-end bits expect
-                "rating": r.get("rating"),
-                "timestamp": r.get("timestamp"),
-            })
-        return {
-            "ratings": results,
-            "source": "profile",
-            "username": data.get("username"),
-            "user_id": data.get("user_id"),
-        }
+    if button_id == "add_rating_submit":
+        if not uname:
+            return {"ok": False, "error": "not_logged_in"}, 401
+        movie_id = payload.get("movie_id") or payload.get("movie")
+        rating = payload.get("rating")
+        if movie_id is None or rating is None:
+            return {"ok": False, "error": "movie_id and rating required"}, 400
+        user_row = get_user_by_username(uname)
+        if not user_row:
+            return {"ok": False, "error": "user_not_found"}, 404
+        user_id = int(user_row[0])
+        try:
+            upsert_rating(user_id=user_id, movie_id=int(movie_id), rating=float(rating))
+            return {"ok": True, "message": "Rating saved"}
+        except Exception as ex:
+            logger.exception("Failed to save rating")
+            return {"ok": False, "error": str(ex)}, 500
 
-    # --- View Statistics (DB-backed with JSON fallback) ---
+    if button_id in ("remove_rating_button", "remove_rating"):
+        if not uname:
+            return {"ok": False, "error": "not_logged_in"}, 401
+        movie_id = payload.get("movie_id") or payload.get("movie")
+        if movie_id is None:
+            return {"ok": False, "error": "movie_id required"}, 400
+        user_row = get_user_by_username(uname)
+        if not user_row:
+            return {"ok": False, "error": "user_not_found"}, 404
+        user_id = int(user_row[0])
+        try:
+            deleted = delete_rating(user_id=user_id, movie_id=int(movie_id))
+            return {"ok": True, "deleted": deleted}
+        except Exception as ex:
+            logger.exception("Failed to delete rating")
+            return {"ok": False, "error": str(ex)}, 500
+
+    # --- View Statistics (DB-backed only) ---
     if button_id == "view_statistics_button":
-        from flask import session
         from database.users import get_user_by_username
         from database.db_query import get_user_rating_stats
 
-        uname = session.get("username")
         if not uname:
             return {"error": "not_logged_in"}, 401
 
-        user_row = get_user_by_username(uname)  # (user_id, username, password_hash)
+        user_row = get_user_by_username(uname)
         if not user_row:
             return {"error": "user_not_found"}, 404
 
         user_id = int(user_row[0])
 
-        # 1) Try DB stats first
-        stats = get_user_rating_stats(user_id) or {}
-        total_db = int(stats.get("total", 0) or 0)
-        avg_db = float(stats["avg"]) if stats.get("avg") is not None else 0.0
-        by_genre_db = stats.get("by_genre", [])
+        # DB-only stats (no JSON fallback)
+        try:
+            stats = get_user_rating_stats(user_id) or {}
+            total_db = int(stats.get("total", 0) or 0)
+            avg_db = float(stats["avg"]) if stats.get("avg") is not None else 0.0
+            by_genre_db = stats.get("by_genre", []) or []
 
-        # 2) If DB has nothing yet, fall back to profile JSON (and try to sync)
-        if total_db == 0:
-            total_json = 0
-            avg_json = 0.0
-            try:
-                # Best-effort sync (if profile JSON exists)
-                try:
-                    from api.sync_user_json import sync_user_ratings
-                    if PROFILE_PATH.exists():
-                        sync_user_ratings(PROFILE_PATH)
-                        # re-read DB after sync
-                        stats2 = get_user_rating_stats(user_id) or {}
-                        if int(stats2.get("total", 0) or 0) > 0:
-                            total_db = int(stats2.get("total", 0))
-                            avg_db = float(stats2["avg"]) if stats2.get("avg") is not None else 0.0
-                            by_genre_db = stats2.get("by_genre", [])
-                except Exception as ex:
-                    logger.warning("stats: sync_user_ratings best-effort failed: %s", ex)
+            statistics = {
+                "total_ratings": total_db,
+                "average_rating": avg_db,
+                "top_genres": [
+                    {"genre": g["genre"], "count": int(g.get("count", 0))}
+                    for g in by_genre_db
+                ],
+            }
+            return {"statistics": statistics, "source": "stats_db"}
+        except Exception:
+            logger.exception("stats: DB query failed")
+            return {"error": "internal"}, 500
 
-                # If still zero, compute from local profile JSON as a fallback
-                if total_db == 0 and PROFILE_PATH.exists():
-                    prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-                    raw = [float(r["rating"]) for r in prof.get("ratings", []) if r.get("rating") is not None]
-                    total_json = len(raw)
-                    avg_json = round(sum(raw) / total_json, 2) if total_json else 0.0
-            except Exception:
-                logger.exception("stats: JSON fallback failed")
-
-            if total_db == 0:
-                statistics = {
-                    "total_ratings": total_json,
-                    "average_rating": avg_json,
-                    "top_genres": [],  # genre breakdown needs DB join; omit in fallback
-                }
-                return {"statistics": statistics, "source": "stats_profile_fallback"}
-
-        # 3) Normal DB response
-        statistics = {
-            "total_ratings": total_db,
-            "average_rating": avg_db,
-            "top_genres": [
-                {"genre": g["genre"], "count": int(g.get("count", 0))}
-                for g in (by_genre_db or [])
-            ],
-        }
-        return {"statistics": statistics, "source": "stats_db"}
-
-    # --- Get Recommendations ---
+    # --- Get Recommendations (DB-backed user id) ---
     if button_id == "get_rec_button":
         from recommender.baseline import recommend_titles_for_user
+        from database.users import get_user_by_username
+
         try:
-            profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-            uid = int(profile.get("user_id", 99))
-        except Exception:
-            uid = 99
-
-        recs = recommend_titles_for_user(uid)
-
-        results = []
-        for item in recs:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                first, score = item[0], item[1]
-                title = id_to_title(first) if isinstance(first, int) else normalize_title(str(first))
-                try:
-                    rating_val = float(score)
-                except Exception:
-                    rating_val = None
-                results.append({"title": title, "movie": title, "rating": rating_val})
+            if uname:
+                user_row = get_user_by_username(uname)
+                uid = int(user_row[0]) if user_row else None
             else:
-                title = _resolve_title_from_entry(item if isinstance(item, dict) else {"movie": item})
-                results.append({"title": title, "movie": title, "rating": None})
+                uid = None
 
-        return {"ratings": results, "source": "recs"}
+            # if no user available, pass None/anonymous to recommender
+            recs = recommend_titles_for_user(uid) if uid is not None else recommend_titles_for_user(None)
 
-    # --- Add Rating (writes to profile JSON and best-effort sync to DB) ---
+            results = []
+            for item in recs:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    first, score = item[0], item[1]
+                    title = id_to_title(first) if isinstance(first, int) else normalize_title(str(first))
+                    try:
+                        rating_val = float(score)
+                    except Exception:
+                        rating_val = None
+                    results.append({"title": title, "movie": title, "rating": rating_val})
+                else:
+                    title = _resolve_title_from_entry(item if isinstance(item, dict) else {"movie": item})
+                    results.append({"title": title, "movie": title, "rating": None})
+
+            return {"ratings": results, "source": "recs_db"}
+        except Exception:
+            logger.exception("recs: failed")
+            return {"error": "internal"}, 500
+
+    # --- Add Rating: save to DB directly ---
     if button_id == "add_rating_submit":
         movie_id = payload.get("movie_id") or payload.get("movie")
         rating = payload.get("rating")
@@ -181,111 +194,44 @@ def handle_button_click(button_id, payload=None):
             return {"ok": False, "error": "No rating provided."}
 
         try:
-            # read or create profile JSON
-            if PROFILE_PATH.exists():
-                prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-            else:
-                prof = {"username": None, "user_id": None, "ratings": []}
+            if not uname:
+                return {"ok": False, "error": "not_logged_in"}, 401
 
-            # normalize numeric movie id when possible
-            try:
-                mid_val = int(movie_id)
-            except Exception:
-                mid_val = None
+            from database.users import get_user_by_username
+            from database.db_query import upsert_rating
 
-            # remove any existing rating for same movie
-            prof["ratings"] = [
-                r for r in prof.get("ratings", [])
-                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
-            ]
+            user_row = get_user_by_username(uname)
+            if not user_row:
+                return {"ok": False, "error": "user_not_found"}, 404
+            user_id = int(user_row[0])
 
-            new_entry = {
-                "movie_id": mid_val if mid_val is not None else movie_id,
-                "rating": float(rating),
-                "timestamp": int(time.time())
-            }
-            prof.setdefault("ratings", []).append(new_entry)
-            PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
+            upsert_rating(user_id=user_id, movie_id=int(movie_id), rating=float(rating))
 
-            # attempt sync to DB (best-effort)
-            try:
-                from api.sync_user_json import sync_user_ratings
-                sync_user_ratings(PROFILE_PATH)
-            except Exception as ex:
-                logger.warning("sync_user_ratings failed on add: %s", ex)
-            
-            # invalidate cached recommendations so new rating takes effect
-            try:
-                from flask import session
-                from database.users import get_user_by_username
-                from cache import cache, key_content_recs
-                
-                uname = session.get("username")
-                user_id_for_cache = None
-                if uname:
-                    ur = get_user_by_username(uname)  # (id, username, hash)
-                    if ur:
-                        user_id_for_cache = int(ur[0])
-                if not user_id_for_cache:
-                    # fallback to profile file if available
-                    user_id_for_cache = int((prof or {}).get("user_id") or 0)
-                
-                if user_id_for_cache:
-                    for size in (10, 20, 50, 100):
-                        cache.delete(key_content_recs(user_id=user_id_for_cache, k=size))
-            except Exception as _ex:
-                logger.warning("cache bust on rating failed: %s", _ex)
-
-            # return updated ratings with titles
-            results = []
-            for r in prof.get("ratings", []):
-                title = _resolve_title_from_entry(r) or (f"ID {r.get('movie_id')}" if r.get("movie_id") else "Untitled")
-                results.append({
-                    "title": title,
-                    "rating": r.get("rating"),
-                    "movie_id": r.get("movie_id"),
-                    "timestamp": r.get("timestamp")
-                })
-
-            return {"ok": True, "message": "Rating saved.", "ratings": results, "source": "profile"}
-
+            # invalidate any in-process cache elsewhere if needed (already handled server-side cache)
+            return {"ok": True, "message": "Rating saved", "user_id": user_id}
         except Exception as ex:
             logger.exception("Failed to add rating")
             return {"ok": False, "error": str(ex)}
 
-    # --- Remove Rating (accept both 'remove_rating_button' and 'remove_rating') ---
+    # --- Remove Rating ---
     if button_id in ("remove_rating_button", "remove_rating"):
         movie_id = payload.get("movie_id") or payload.get("movie")
         if movie_id is None:
             return {"ok": False, "error": "No movie_id provided."}
-
         try:
-            if PROFILE_PATH.exists():
-                prof = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-            else:
-                prof = {"username": None, "user_id": None, "ratings": []}
+            if not uname:
+                return {"ok": False, "error": "not_logged_in"}, 401
 
-            before = len(prof.get("ratings", []))
-            prof["ratings"] = [
-                r for r in prof.get("ratings", [])
-                if str(r.get("movie_id") if r.get("movie_id") is not None else r.get("movie")) != str(movie_id)
-            ]
-            after = len(prof.get("ratings", []))
-            PROFILE_PATH.write_text(json.dumps(prof, indent=2), encoding="utf-8")
+            from database.users import get_user_by_username
+            from database.db_query import delete_rating
 
-            try:
-                from api.sync_user_json import sync_user_ratings
-                sync_user_ratings(PROFILE_PATH)
-            except Exception as ex:
-                logger.warning("sync_user_ratings failed on remove: %s", ex)
+            user_row = get_user_by_username(uname)
+            if not user_row:
+                return {"ok": False, "error": "user_not_found"}, 404
+            user_id = int(user_row[0])
 
-            return {
-                "ok": True,
-                "message": "Removed." if before != after else "No rating found.",
-                "ratings": prof.get("ratings", []),
-                "source": "profile"
-            }
+            deleted = delete_rating(user_id=user_id, movie_id=int(movie_id))
+            return {"ok": True, "message": f"Deleted {deleted} rows", "deleted": deleted}
         except Exception as ex:
             logger.exception("Failed to remove rating")
             return {"ok": False, "error": str(ex)}

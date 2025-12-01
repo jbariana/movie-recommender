@@ -22,9 +22,16 @@ from database.users import get_user_by_username, create_user, set_password  # no
 api_bp = Blueprint("api_bp", __name__)
 logger = logging.getLogger(__name__)
 
-# path to user profile JSON
-PROFILE_PATH = Path(__file__).resolve().parent.parent / "user_profile" / "user_profile.json"
-PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+# path to user profile JSON (now per-user files)
+PROFILE_DIR = Path(__file__).resolve().parent.parent / "user_profile"
+PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+def profile_path_for(username: str | None) -> Path:
+    """Return a safe per-username profile file Path. Fallback to generic file."""
+    if username:
+        safe = "".join(c for c in username if c.isalnum() or c in ("_", "-")).lower()
+        return PROFILE_DIR / f"{safe}.json"
+    return PROFILE_DIR / "user_profile.json"
 
 
 # ------------------------------
@@ -58,9 +65,11 @@ def logout():
     Sync local profile JSON to database then clear session.
     """
     try:
-        from api.sync_user_json import sync_user_ratings
-        if PROFILE_PATH.exists():
-            sync_user_ratings(PROFILE_PATH)
+        uname = session.get("username")
+        ppath = profile_path_for(uname)
+        if ppath.exists():
+            from api.sync_user_json import sync_user_ratings
+            sync_user_ratings(ppath)
     except Exception:
         logger.exception("sync failed on logout")
 
@@ -102,11 +111,11 @@ def auth_signup():
         session["username"] = username
         session.permanent = True
         
-        #sync to user_profile.json
+        #sync to per-user profile JSON (no global overwrite)
         from database.db_query import get_ratings_for_user
         ratings = get_ratings_for_user(user_id)
         profile_json = {"username": username, "user_id": user_id, "ratings": ratings}
-        PROFILE_PATH.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
+        profile_path_for(username).write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
         
         flash("account created successfully!", "success")
         
@@ -162,11 +171,8 @@ def auth_login():
     session["username"] = stored_username
     session.permanent = True
 
-    #sync to user_profile.json
-    from database.db_query import get_ratings_for_user
-    ratings = get_ratings_for_user(user_id)
-    profile_json = {"username": stored_username, "user_id": user_id, "ratings": ratings}
-    PROFILE_PATH.write_text(json.dumps(profile_json, indent=2), encoding="utf-8")
+    # remove per-user JSON write — DB is authoritative
+    # previous code wrote profile JSON here; skip it to avoid server-side JSON files
 
     if request.is_json:
         return jsonify({"message": "logged in", "username": stored_username}), 200
