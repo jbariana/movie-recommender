@@ -140,6 +140,17 @@ user add            Add a single movie rating to local user profile""")
                 print(f"No recommendations found for user {user_id}.")
             continue
 
+        if command.startswith("import_lb"):
+            parts = command.split()
+            if len(parts) != 2:
+                print("Usage: import_lb <letterboxd_username>")
+                continue
+
+            username = parts[1]
+            from scripts.import_letterboxd import import_from_letterboxd
+            import_from_letterboxd(username, user.getUserID())
+            continue
+
         if command == "help":
             print("""
 Available commands:
@@ -201,3 +212,23 @@ def show_user_profile(user_id=1):
     else:
         print("No favorites yet.")
     print("========================\n")
+
+def show_user_profile():
+    profile = get_user_profile(user.getUserID())
+
+    print("\n===== USER PROFILE =====")
+    print(f"Username: {profile['username']}")
+    print(f"Avg Rating: {profile['average_rating']}")
+    print("Rated movies:", len(profile["ratings"]))
+
+    print("\nOptions:")
+    print("1. Import ratings from Letterboxd")
+    print("2. Back")
+
+    choice = input("\nChoose option: ").strip()
+
+    if choice == "1":
+        username = input("Letterboxd username: ").strip()
+        from scripts.import_letterboxd import import_from_letterboxd
+        import_from_letterboxd(username, user.getUserID())
+        return
