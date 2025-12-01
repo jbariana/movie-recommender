@@ -66,7 +66,14 @@ def load_movies(path: Path, eng) -> None:
     #select only needed columns
     df = df[["movie_id", "title", "year", "genres"]]
     #bulk insert into database
-    df.to_sql("movies", eng, if_exists="append", index=False, **TO_SQL_KW)
+    df.to_sql(
+    "movies",
+    eng,
+    if_exists="append",
+    index=False,
+    chunksize=200,  # <-- insert 200 rows at a time
+    **TO_SQL_KW
+)
 
 #build users table from distinct user_ids in ratings.csv
 def load_users_from_ratings(path: Path, eng) -> None:
