@@ -55,25 +55,19 @@ def clear_tables(keep_users: bool = False) -> None:
 
 #load movies.csv into movies table
 def load_movies(path: Path, eng) -> None:
-    #read movies CSV file
     df = pd.read_csv(path / "movies.csv")
-    #extract year from title and create separate year column
     df["year"] = df["title"].apply(parse_year)
-    #remove year from title string
     df["title"] = df["title"].apply(lambda t: re.sub(r"\s*\(\d{4}\)\s*$", "", t) if isinstance(t, str) else t)
-    #rename column to match database schema
     df.rename(columns={"movieId": "movie_id"}, inplace=True)
-    #select only needed columns
     df = df[["movie_id", "title", "year", "genres"]]
-    #bulk insert into database
+
     df.to_sql(
-    "movies",
-    eng,
-    if_exists="append",
-    index=False,
-    chunksize=200,  # <-- insert 200 rows at a time
-    **TO_SQL_KW
-)
+        "movies",
+        eng,
+        if_exists="append",
+        index=False,
+        **TO_SQL_KW   # ← use ONLY this
+    )
 
 #build users table from distinct user_ids in ratings.csv
 def load_users_from_ratings(path: Path, eng) -> None:
