@@ -32,14 +32,6 @@ CREATE TABLE IF NOT EXISTS ratings (
     FOREIGN KEY (movie_id) REFERENCES movies(movie_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
-CREATE TABLE IF NOT EXISTS tags (
-    user_id INTEGER NOT NULL,
-    movie_id INTEGER NOT NULL,
-    tag TEXT NOT NULL,
-    timestamp BIGINT NOT NULL,
-    PRIMARY KEY (user_id, movie_id, tag, timestamp),
-    FOREIGN KEY (movie_id) REFERENCES movies(movie_id)
-);
 CREATE TABLE IF NOT EXISTS links (
     movie_id INTEGER PRIMARY KEY,
     imdb_id INTEGER,
