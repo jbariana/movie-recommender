@@ -2,7 +2,7 @@
 
 ## Overview
 
-Movie recommender web app using collaborative filtering on the MovieLens dataset with user ratings stored in PostgreSQL. Supports concurrent accesses and unencrypted logins.
+Flask web application for a personalized movie recommendation platform that suggests movies based on a user’s ratings.
 
 ## Features
 
