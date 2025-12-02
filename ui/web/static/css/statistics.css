@@ -1,86 +1,149 @@
-/* Statistics page styling */
+/* Statistics page styling - improved layout and responsive cards */
+
 .statistics-container {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
+  box-sizing: border-box;
 }
 
+/* page/title */
 .statistics-title {
   color: var(--text);
   font-size: 1.5rem;
-  margin-bottom: 24px;
-  font-weight: 600;
+  margin: 0;
+  margin-bottom: 18px;
+  font-weight: 700;
   padding-bottom: 12px;
   border-bottom: 2px solid var(--accent);
 }
 
-.stats-card {
+/* Grid of statistic cards - responsive */
+.stats-grid,
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+/* Card styles (support both class variants used in JS/templates) */
+.stats-card,
+.stat-card {
   background: var(--card);
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-  border: 1px solid #1a2532;
+  border-radius: 10px;
+  padding: 18px;
+  border: 1px solid rgba(26,37,50,0.25);
+  box-shadow: 0 6px 18px rgba(3,8,12,0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
 }
 
-.stats-card h3 {
-  color: var(--text);
-  font-size: 1.1rem;
-  margin: 0 0 16px 0;
-  font-weight: 600;
+/* Headings inside cards */
+.stats-card h3,
+.stat-card h3 {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 0 0 10px 0;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
+/* Large numeric stat */
+.stat-big,
+.stat-value {
+  color: var(--text);
+  font-size: 2.1rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+/* Fallback smaller stat value */
+.stat-card .stat-value,
+.stats-card .stat-value {
+  font-size: 1.25rem;
+  margin-top: 6px;
+}
+
+/* stat-item rows (used by JS renderers) */
 .stat-item {
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #1a2532;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(26,37,50,0.12);
 }
-
 .stat-item:last-child {
   border-bottom: none;
 }
-
 .stat-label {
   color: var(--muted);
   font-size: 0.95rem;
 }
-
 .stat-value {
   color: var(--text);
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
+/* Genre list layout */
+.genre-list,
+.genre-items {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.genre-list li,
 .genre-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
-  gap: 12px;
-  border-bottom: 1px solid #1a2532;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.01);
+  color: var(--text);
+  border: 1px solid rgba(26,37,50,0.06);
 }
-
-.genre-item:last-child {
-  border-bottom: none;
-}
-
 .genre-rank {
   color: var(--accent);
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: 700;
+  margin-right: 8px;
   min-width: 30px;
 }
-
 .genre-name {
-  color: var(--text);
-  font-size: 0.95rem;
   flex: 1;
+  color: var(--text);
 }
-
 .genre-count {
   color: var(--muted);
-  font-size: 0.85rem;
+  margin-left: 12px;
+  font-size: 0.9rem;
+}
+
+/* small screens: tighter spacing */
+@media (max-width: 600px) {
+  .statistics-container {
+    padding: 12px;
+  }
+  .stats-grid,
+  .statistics-grid {
+    gap: 12px;
+  }
+  .stat-big,
+  .stat-value {
+    font-size: 1.6rem;
+  }
+  .stats-card,
+  .stat-card {
+    padding: 14px;
+    min-height: 90px;
+  }
 }

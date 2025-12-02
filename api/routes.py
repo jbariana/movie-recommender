@@ -378,3 +378,30 @@ def get_movie_details(movie_id):
     except Exception as e:
         logger.error(f"Failed to get movie {movie_id}: {e}")
         return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/api/user/stats", methods=["GET"])
+def api_user_stats():
+    """
+    Compatibility endpoint used by the frontend (calls /api/user/stats).
+    Returns JSON stats for the currently-logged-in user.
+    """
+    from flask import jsonify, session
+    from database.users import get_user_by_username
+    from database.db_query import get_user_rating_stats
+
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "not_authenticated"}), 401
+
+    user = get_user_by_username(username)
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    user_id = user[0]  # get_user_by_username returns (user_id, username, password_hash)
+    try:
+        stats = get_user_rating_stats(user_id)
+    except Exception as e:
+        logger.exception("failed to fetch user stats")
+        return jsonify({"error": "internal_error"}), 500
+
+    return jsonify(stats), 200
